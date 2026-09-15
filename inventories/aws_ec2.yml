@@ -1,0 +1,51 @@
+---
+# Indique à Ansible d'utiliser le plugin d'inventaire dynamique EC2
+# fourni par la collection amazon.aws
+plugin: amazon.aws.aws_ec2
+
+# Régions à interroger (adaptez selon vos besoins)
+regions:
+  - eu-north-1   # région principale stocholm
+  # - eu-west-3   # région secondaire (Paris)
+
+# Ne garder que les instances en cours d'exécution
+filters:
+  instance-state-name: running   # exclut les instances stoppées/terminées
+
+# Utiliser le nom du profil AWS CLI (~/.aws/credentials) si besoin
+# profile: my-profile
+
+# Construire des groupes dynamiques à partir des tags EC2
+keyed_groups:
+  # Crée des groupes env_<valeur> à partir du tag "Environment" (ex: env_prod)
+  - key: tags.Environment
+    prefix: env
+  # Crée des groupes role_<valeur> à partir du tag "Role" (ex: role_apache)
+  # correspondant aux rôles définis dans roles/
+  - key: tags.Role
+    prefix: role
+  # Crée des groupes type_<valeur> selon le type d'instance (ex: type_t3_micro)
+  - key: instance_type
+    prefix: type
+  # Crée des groupes region_<valeur> selon la région AWS (ex: region_eu_west_1)
+  - key: placement.region
+    prefix: region
+
+# Ordre de préférence pour définir le nom d'hôte dans l'inventaire
+hostnames:
+  - tag:Name             # 1. utilise le tag "Name" si présent
+  - dns-name              # 2. sinon le DNS public/privé AWS
+  - private-ip-address    # 3. sinon l'adresse IP privée
+
+# Variables calculées ajoutées à chaque hôte
+compose:
+  # Utilise l'IP publique pour la connexion SSH, sinon retombe sur l'IP privée
+  ansible_host: public_ip_address | default(private_ip_address)
+
+# Cache pour éviter de spammer l'API AWS à chaque exécution
+cache: true                                   # active le cache
+cache_plugin: jsonfile                        # stockage du cache au format JSON
+cache_connection: /tmp/ansible_aws_ec2_cache  # emplacement du cache
+cache_timeout: 300                            # durée de validité du cache (en secondes)
+
+cache_prefix: aws_ec2

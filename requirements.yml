@@ -1,0 +1,12 @@
+---
+# Fichier de dépendances Ansible Galaxy
+# Installation : ansible-galaxy collection install -r requirements.yml
+collections:
+  # Collection officielle AWS : fournit le plugin d'inventaire dynamique
+  # amazon.aws.aws_ec2 ainsi que les modules de base (ec2_instance, ec2_key, etc.)
+  - name: amazon.aws
+    version: ">=7.0.0"
+  # Collection communautaire AWS : modules complémentaires non couverts
+  # par amazon.aws (ex: community.aws.ec2_vpc_net_info, elb, route53, etc.)
+  - name: community.aws
+    version: ">=7.0.0"
