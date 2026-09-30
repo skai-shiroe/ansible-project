@@ -1,0 +1,30 @@
+---
+# Paquet et service
+apache_package: apache2
+apache_service: apache2
+
+# Écoute
+apache_port: 80
+apache_server_name: "{{ inventory_hostname }}"
+
+# Racine web (document root)
+apache_document_root: /var/www/html
+
+# Utilisateur / groupe du serveur web
+apache_user: www-data
+apache_group: www-data
+
+# Modules à activer (rewrite/headers : Laravel ; proxy_fcgi : PHP-FPM)
+apache_modules:
+  - rewrite
+  - headers
+  - proxy
+  - proxy_fcgi
+  - setenvif
+
+# Nom du fichier de vhost
+apache_vhost_file: laravel.conf
+
+# Socket PHP-FPM utilisé par le vhost pour déléguer PHP
+apache_php_fpm_socket: "/run/php/php{{ php_version | default('8.3') }}-fpm.sock"
+

@@ -1,0 +1,5 @@
+---
+# Constantes internes du rôle (chemins Laravel, non destinés à être surchargés)
+laravel_env_file: "{{ laravel_path }}/.env"
+laravel_storage_dir: "{{ laravel_path }}/storage"
+

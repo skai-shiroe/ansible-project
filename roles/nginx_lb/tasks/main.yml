@@ -1,0 +1,35 @@
+---
+- name: Installer Nginx
+  ansible.builtin.apt:
+    name: "{{ nginx_lb_package }}"
+    state: present
+    update_cache: true
+
+- name: Désactiver le site Nginx par défaut
+  ansible.builtin.file:
+    path: "{{ nginx_lb_default_site }}"
+    state: absent
+  notify: Recharger Nginx
+
+- name: Déployer la configuration du load balancer
+  ansible.builtin.template:
+    src: nginx_lb.conf.j2
+    dest: "{{ nginx_lb_sites_available }}/{{ nginx_lb_site_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Recharger Nginx
+
+- name: Activer le site du load balancer
+  ansible.builtin.file:
+    src: "{{ nginx_lb_sites_available }}/{{ nginx_lb_site_file }}"
+    dest: "{{ nginx_lb_sites_enabled }}/{{ nginx_lb_site_file }}"
+    state: link
+  notify: Recharger Nginx
+
+- name: Démarrer et activer Nginx
+  ansible.builtin.service:
+    name: "{{ nginx_lb_service }}"
+    state: started
+    enabled: true
+

@@ -1,0 +1,8 @@
+---
+- name: Configurer le cluster PostgreSQL (maître / esclave)
+  hosts: databases
+  become: true
+
+  roles:
+    - postgresql
+

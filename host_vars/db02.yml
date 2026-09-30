@@ -1,0 +1,9 @@
+---
+# Nœud réplique (esclave) du cluster PostgreSQL
+postgresql_node_role: replica
+
+# Hôte primaire à partir duquel la réplication est initialisée
+postgresql_primary_host: db01
+
+# Slot de réplication physique dédié à ce nœud
+postgresql_replication_slot: db02_slot

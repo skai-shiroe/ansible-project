@@ -1,0 +1,130 @@
+---
+- name: Installer PostgreSQL
+  ansible.builtin.apt:
+    name: "{{ postgresql_packages }}"
+    state: present
+    update_cache: true
+
+- name: Appliquer les paramètres de postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ postgresql_conf_file }}"
+    regexp: "^#?{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    state: present
+  loop: "{{ postgresql_settings | dict2items }}"
+  notify: Redémarrer PostgreSQL
+
+- name: Déployer pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_hba_file }}"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Redémarrer PostgreSQL
+
+- name: Démarrer et activer PostgreSQL
+  ansible.builtin.service:
+    name: "{{ postgresql_service }}"
+    state: started
+    enabled: true
+
+# =============================================================================
+# Nœud PRIMAIRE (maître) : utilisateur applicatif, utilisateur de réplication
+# et slots de réplication consommés par les nœuds répliques.
+# =============================================================================
+- name: Créer l'utilisateur applicatif
+  community.postgresql.postgresql_user:
+    name: "{{ postgresql_user }}"
+    password: "{{ postgresql_password }}"
+    state: present
+  become: true
+  become_user: postgres
+  when: postgresql_node_role == 'primary'
+
+- name: Créer la base de données applicative
+  community.postgresql.postgresql_db:
+    name: "{{ postgresql_database }}"
+    owner: "{{ postgresql_user }}"
+    state: present
+  become: true
+  become_user: postgres
+  when: postgresql_node_role == 'primary'
+
+- name: Créer l'utilisateur de réplication
+  community.postgresql.postgresql_user:
+    name: "{{ postgresql_replication_user }}"
+    password: "{{ postgresql_replication_password }}"
+    role_attr_flags: "REPLICATION,LOGIN"
+    state: present
+  become: true
+  become_user: postgres
+  when: postgresql_node_role == 'primary'
+
+- name: Créer les slots de réplication physique
+  community.postgresql.postgresql_query:
+    query: >-
+      SELECT pg_create_physical_replication_slot('{{ hostvars[item].postgresql_replication_slot }}')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM pg_replication_slots
+        WHERE slot_name = '{{ hostvars[item].postgresql_replication_slot }}'
+      )
+  become: true
+  become_user: postgres
+  loop: "{{ groups['databases'] | default([]) }}"
+  when:
+    - postgresql_node_role == 'primary'
+    - hostvars[item].postgresql_node_role | default('') == 'replica'
+    - hostvars[item].postgresql_replication_slot is defined
+
+# =============================================================================
+# Nœud RÉPLIQUE (esclave) : initialisation depuis le primaire (pg_basebackup)
+# et mise en mode standby (standby.signal généré par l'option -R).
+# =============================================================================
+- name: Vérifier si la réplique est déjà initialisée
+  ansible.builtin.stat:
+    path: "{{ postgresql_data_dir }}/standby.signal"
+  register: postgresql_standby_signal
+  when: postgresql_node_role == 'replica'
+
+- name: Arrêter PostgreSQL sur la réplique
+  ansible.builtin.service:
+    name: "{{ postgresql_service }}"
+    state: stopped
+  when:
+    - postgresql_node_role == 'replica'
+    - not postgresql_standby_signal.stat.exists
+
+- name: Supprimer l'ancien répertoire de données de la réplique
+  ansible.builtin.file:
+    path: "{{ postgresql_data_dir }}"
+    state: absent
+  when:
+    - postgresql_node_role == 'replica'
+    - not postgresql_standby_signal.stat.exists
+
+- name: Initialiser la réplique avec pg_basebackup
+  ansible.builtin.command:
+    cmd: >-
+      {{ postgresql_bin_dir }}/pg_basebackup
+      -h {{ postgresql_primary_host }}
+      -p {{ postgresql_port }}
+      -D {{ postgresql_data_dir }}
+      -U {{ postgresql_replication_user }}
+      -X stream -C -S {{ postgresql_replication_slot }} -R
+  become: true
+  become_user: postgres
+  environment:
+    PGPASSWORD: "{{ postgresql_replication_password }}"
+  when:
+    - postgresql_node_role == 'replica'
+    - not postgresql_standby_signal.stat.exists
+  notify: Redémarrer PostgreSQL
+
+- name: Démarrer et activer PostgreSQL sur la réplique
+  ansible.builtin.service:
+    name: "{{ postgresql_service }}"
+    state: started
+    enabled: true
+  when: postgresql_node_role == 'replica'
+

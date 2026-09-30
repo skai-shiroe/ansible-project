@@ -1,0 +1,39 @@
+---
+# Emplacement de l'application
+laravel_path: /var/www/laravel
+
+# Dépôt Git de l'application (à remplacer par le dépôt réel)
+laravel_repo: "https://github.com/TON_COMPTE/TON_PROJET.git"
+laravel_branch: main
+
+# Propriétaire des fichiers
+laravel_owner: www-data
+laravel_group: www-data
+
+# Environnement applicatif
+laravel_app_env: production
+laravel_app_debug: "false"
+laravel_app_url: "http://{{ ansible_host | default(inventory_hostname) }}"
+laravel_app_key: "{{ vault_laravel_app_key | default('') }}"
+
+# Base de données (PostgreSQL primaire)
+laravel_db_connection: pgsql
+laravel_db_host: "{{ groups['databases'][0] | default('127.0.0.1') }}"
+laravel_db_port: 5432
+laravel_db_database: laravel
+laravel_db_username: laravel
+laravel_db_password: "{{ vault_laravel_db_password | default('') }}"
+
+# Cache / sessions / queues (Redis)
+laravel_cache_store: redis
+laravel_session_driver: redis
+laravel_queue_connection: redis
+laravel_redis_host: "{{ groups['redis'][0] | default('127.0.0.1') }}"
+laravel_redis_port: 6379
+laravel_redis_password: "{{ vault_redis_password | default('') }}"
+
+# Paquets système nécessaires au déploiement
+laravel_system_packages:
+  - composer
+  - git
+  - unzip

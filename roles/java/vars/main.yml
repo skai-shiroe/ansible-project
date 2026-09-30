@@ -1,0 +1,5 @@
+---
+# Constantes internes du rôle (non destinées à être surchargées)
+java_bin: /usr/bin/java
+java_apt_lock_timeout: 300
+

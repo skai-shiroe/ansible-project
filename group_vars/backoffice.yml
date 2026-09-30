@@ -1,0 +1,32 @@
+---
+# =========================
+# Java
+# =========================
+
+java_version: "21"
+
+# =========================
+# Spring Boot
+# =========================
+
+springboot_app_name: backoffice
+
+springboot_port: 8080
+
+# Emplacement de déploiement de l'application
+springboot_home: "/opt/{{ springboot_app_name }}"
+springboot_jar_name: "{{ springboot_app_name }}.jar"
+
+# Options de la JVM
+springboot_java_opts: "-Xms256m -Xmx512m"
+
+# Profil Spring actif
+springboot_spring_profiles_active: prod
+
+# =========================
+# Accès à la base de données
+# =========================
+
+springboot_datasource_url: "jdbc:postgresql://{{ groups['databases'][0] | default('127.0.0.1') }}:5432/laravel"
+springboot_datasource_username: laravel
+springboot_datasource_password: "{{ vault_springboot_db_password | default('') }}"

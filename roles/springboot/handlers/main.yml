@@ -1,0 +1,7 @@
+---
+- name: Redémarrer Spring Boot
+  ansible.builtin.systemd:
+    name: "{{ springboot_service_name }}"
+    daemon_reload: true
+    state: restarted
+

@@ -1,0 +1,18 @@
+---
+# Écoute
+redis_port: 6379
+redis_bind: "127.0.0.1"
+
+# Mémoire
+redis_maxmemory: "256mb"
+redis_maxmemory_policy: allkeys-lru
+
+# Persistance
+redis_appendonly: "no"
+
+# Authentification (vide = pas de mot de passe)
+redis_password: ""
+
+# Nombre de bases logiques
+redis_databases: 16
+

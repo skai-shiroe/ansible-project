@@ -1,0 +1,17 @@
+---
+- name: Configurer les serveurs Web
+  hosts: webservers
+  become: true
+
+  roles:
+    - apache
+    - php
+    - laravel
+
+- name: Configurer le serveur d'administration (backoffice)
+  hosts: backoffice
+  become: true
+
+  roles:
+    - java
+    - springboot

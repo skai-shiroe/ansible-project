@@ -1,0 +1,21 @@
+---
+# Paquet et service
+nginx_lb_package: nginx
+nginx_lb_service: nginx
+
+# Écoute
+nginx_lb_listen_port: 80
+nginx_lb_server_name: "_"
+
+# Upstream (backends web)
+nginx_lb_upstream_name: laravel_web
+nginx_lb_backend_servers: []
+nginx_lb_backend_port: 8080
+# round_robin | least_conn | ip_hash
+nginx_lb_lb_method: least_conn
+
+# Proxy
+nginx_lb_proxy_connect_timeout: 5s
+nginx_lb_proxy_read_timeout: 60s
+nginx_lb_health_check_path: /up
+

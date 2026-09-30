@@ -1,0 +1,31 @@
+---
+- name: Installer Redis
+  ansible.builtin.apt:
+    name: "{{ redis_package }}"
+    state: present
+    update_cache: true
+
+- name: Appliquer les paramètres Redis
+  ansible.builtin.lineinfile:
+    path: "{{ redis_conf_file }}"
+    regexp: "^#?{{ item.key }} "
+    line: "{{ item.key }} {{ item.value }}"
+    state: present
+  loop: "{{ redis_settings | dict2items }}"
+  notify: Redémarrer Redis
+
+- name: Définir le mot de passe Redis
+  ansible.builtin.lineinfile:
+    path: "{{ redis_conf_file }}"
+    regexp: "^#?requirepass "
+    line: "requirepass {{ redis_password }}"
+    state: present
+  when: redis_password | length > 0
+  notify: Redémarrer Redis
+
+- name: Démarrer et activer Redis
+  ansible.builtin.service:
+    name: "{{ redis_service }}"
+    state: started
+    enabled: true
+

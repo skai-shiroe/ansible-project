@@ -1,0 +1,50 @@
+---
+- name: Installer Composer, Git et Unzip
+  ansible.builtin.apt:
+    name: "{{ laravel_system_packages }}"
+    state: present
+    update_cache: true
+
+- name: Créer le répertoire de l'application
+  ansible.builtin.file:
+    path: "{{ laravel_path }}"
+    state: directory
+    owner: "{{ laravel_owner }}"
+    group: "{{ laravel_group }}"
+    mode: "0755"
+
+- name: Récupérer l'application Laravel
+  ansible.builtin.git:
+    repo: "{{ laravel_repo }}"
+    dest: "{{ laravel_path }}"
+    version: "{{ laravel_branch }}"
+    force: true
+
+- name: Créer le fichier .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ laravel_env_file }}"
+    owner: "{{ laravel_owner }}"
+    group: "{{ laravel_group }}"
+    mode: "0600"
+
+- name: Installer les dépendances Laravel
+  community.general.composer:
+    command: install
+    working_dir: "{{ laravel_path }}"
+    no_dev: true
+    optimize_autoloader: true
+
+- name: Générer la clé d'application (si absente)
+  ansible.builtin.command:
+    cmd: php artisan key:generate --force
+    chdir: "{{ laravel_path }}"
+  when: laravel_app_key | length == 0
+  changed_when: true
+
+- name: Donner les permissions à Laravel
+  ansible.builtin.file:
+    path: "{{ laravel_path }}"
+    owner: "{{ laravel_owner }}"
+    group: "{{ laravel_group }}"
+    recurse: true

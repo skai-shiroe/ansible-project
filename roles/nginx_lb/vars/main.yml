@@ -1,0 +1,8 @@
+---
+# Constantes internes du rôle (chemins Nginx, non destinés à être surchargés)
+nginx_lb_conf_dir: /etc/nginx
+nginx_lb_sites_available: /etc/nginx/sites-available
+nginx_lb_sites_enabled: /etc/nginx/sites-enabled
+nginx_lb_default_site: /etc/nginx/sites-enabled/default
+nginx_lb_site_file: "{{ nginx_lb_upstream_name }}.conf"
+

@@ -1,0 +1,9 @@
+---
+# Constantes internes du rôle (chemins PostgreSQL, non destinés à être surchargés)
+postgresql_conf_dir: "/etc/postgresql/{{ postgresql_version }}/main"
+postgresql_conf_file: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+postgresql_hba_file: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+postgresql_service: postgresql
+

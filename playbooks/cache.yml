@@ -1,0 +1,8 @@
+---
+- name: Configurer le serveur de cache
+  hosts: redis
+  become: true
+
+  roles:
+    - redis
+

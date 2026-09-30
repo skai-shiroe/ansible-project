@@ -1,0 +1,25 @@
+# =============================================================================
+# pg_hba.conf - Géré par le rôle Ansible "postgresql"
+# NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# Connexions locales
+local   all             postgres                                peer
+local   all             all                                     peer
+
+# Connexions locales (TCP)
+host    all             all             127.0.0.1/32            scram-sha-256
+host    all             all             ::1/128                 scram-sha-256
+
+# Connexions des applications
+{% for network in postgresql_allowed_networks %}
+host    all             all             {{ network }}    scram-sha-256
+{% endfor %}
+
+# Réplication depuis les nœuds répliques du cluster
+{% for host in groups['databases'] | default([]) %}
+{% if hostvars[host].postgresql_node_role | default('') == 'replica' %}
+host    replication     {{ postgresql_replication_user }}    {{ hostvars[host].ansible_host | default(host) }}/32    scram-sha-256
+{% endif %}
+{% endfor %}

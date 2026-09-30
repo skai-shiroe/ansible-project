@@ -1,0 +1,19 @@
+# Géré par le rôle Ansible "springboot" - NE PAS MODIFIER MANUELLEMENT
+[Unit]
+Description={{ springboot_app_name }} (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ springboot_user }}
+Group={{ springboot_group }}
+WorkingDirectory={{ springboot_home }}
+EnvironmentFile={{ springboot_env_file }}
+ExecStart=/usr/bin/java $JAVA_OPTS -jar {{ springboot_home }}/{{ springboot_jar_name }} --server.port={{ springboot_port }}
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

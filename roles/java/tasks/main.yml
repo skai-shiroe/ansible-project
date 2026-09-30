@@ -1,0 +1,18 @@
+---
+- name: Installer le JDK OpenJDK
+  ansible.builtin.apt:
+    name: "{{ java_package }}"
+    state: present
+    update_cache: true
+    lock_timeout: "{{ java_apt_lock_timeout }}"
+
+- name: Vérifier la version de Java
+  ansible.builtin.command:
+    cmd: "{{ java_bin }} -version"
+  register: java_version_check
+  changed_when: false
+
+- name: Afficher la version de Java
+  ansible.builtin.debug:
+    var: java_version_check.stderr_lines
+

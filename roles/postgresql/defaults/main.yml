@@ -1,0 +1,48 @@
+---
+# Version et écoute
+postgresql_version: "17"
+postgresql_port: 5432
+postgresql_listen_addresses: "*"
+
+# Base et utilisateur applicatif
+postgresql_database: laravel
+postgresql_user: laravel
+postgresql_password: ""
+
+# Dimensionnement
+postgresql_max_connections: 100
+postgresql_shared_buffers: "128MB"
+postgresql_effective_cache_size: "512MB"
+
+# Rôle du nœud dans le cluster (surchargé en host_vars)
+# primary = maître | replica = esclave
+postgresql_node_role: primary
+
+# Réplication
+postgresql_replication_user: replicator
+postgresql_replication_password: ""
+postgresql_primary_host: "{{ groups['databases'][0] | default(inventory_hostname) }}"
+postgresql_replication_slot: ""
+
+# Réseaux autorisés à se connecter
+postgresql_allowed_networks:
+  - 0.0.0.0/0
+
+# Paquets installés
+postgresql_packages:
+  - "postgresql-{{ postgresql_version }}"
+  - "postgresql-contrib-{{ postgresql_version }}"
+  - python3-psycopg2
+
+# Paramètres écrits dans postgresql.conf
+postgresql_settings:
+  listen_addresses: "'{{ postgresql_listen_addresses }}'"
+  port: "{{ postgresql_port }}"
+  max_connections: "{{ postgresql_max_connections }}"
+  shared_buffers: "{{ postgresql_shared_buffers }}"
+  effective_cache_size: "{{ postgresql_effective_cache_size }}"
+  wal_level: replica
+  max_wal_senders: 5
+  max_replication_slots: 5
+  hot_standby: "on"
+

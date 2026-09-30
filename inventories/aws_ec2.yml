@@ -1,13 +1,10 @@
----
 # Indique à Ansible d'utiliser le plugin d'inventaire dynamique EC2
 # fourni par la collection amazon.aws
 plugin: amazon.aws.aws_ec2
 
 # Régions à interroger (adaptez selon vos besoins)
 regions:
-  - eu-north-1   # région principale stocholm
-  # - eu-west-3   # région secondaire (Paris)
-
+  - eu-north-1   # région principale 
 # Ne garder que les instances en cours d'exécution
 filters:
   instance-state-name: running   # exclut les instances stoppées/terminées
@@ -17,7 +14,7 @@ filters:
 
 # Construire des groupes dynamiques à partir des tags EC2
 keyed_groups:
-  # Crée des groupes env_<valeur> à partir du tag "Environment" (ex: env_prod)
+  # Crée des groupes env_<valeur> à partir du tag "Environment" (ex: [env_acc],[env_prod])
   - key: tags.Environment
     prefix: env
   # Crée des groupes role_<valeur> à partir du tag "Role" (ex: role_apache)
@@ -30,6 +27,20 @@ keyed_groups:
   # Crée des groupes region_<valeur> selon la région AWS (ex: region_eu_west_1)
   - key: placement.region
     prefix: region
+
+groups:
+  # Crée un groupe "all_ec2" contenant toutes les instances EC2
+  all_ec2: "'ec2' in group_names"
+  # Crée un groupe "webservers" pour les instances avec le tag Role=web
+  webservers: "'web' in tags.Role"
+  # Crée un groupe "databases" pour les instances avec le tag Role=db
+  databases: "'db' in tags.Role"
+  # Crée un groupe "loadbalancers" pour les instances avec le tag Role=lb
+  loadbalancers: "'lb' in tags.Role"
+  # Crée un groupe "backoffice" pour les instances avec le tag Role=backoffice
+  backoffice: "'backoffice' in tags.Role"
+  # Crée un groupe "redis" pour les instances avec le tag Role=redis
+  redis: "'redis' in tags.Role"
 
 # Ordre de préférence pour définir le nom d'hôte dans l'inventaire
 hostnames:
@@ -46,6 +57,6 @@ compose:
 cache: true                                   # active le cache
 cache_plugin: jsonfile                        # stockage du cache au format JSON
 cache_connection: /tmp/ansible_aws_ec2_cache  # emplacement du cache
-cache_timeout: 300                            # durée de validité du cache (en secondes)
+cache_timeout: 600                            # durée de validité du cache (en secondes)
 
 cache_prefix: aws_ec2

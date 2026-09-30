@@ -1,0 +1,22 @@
+# =============================================================================
+# Vhost Apache pour l'application Laravel
+# Géré par le rôle Ansible "apache" - NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+<VirtualHost *:{{ apache_port }}>
+    ServerName {{ apache_server_name }}
+    DocumentRoot {{ apache_document_root }}
+
+    <Directory {{ apache_document_root }}>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    # Délégation des scripts PHP à PHP-FPM
+    <FilesMatch \.php$>
+        SetHandler "proxy:unix:{{ apache_php_fpm_socket }}|fcgi://localhost/"
+    </FilesMatch>
+
+    ErrorLog ${APACHE_LOG_DIR}/{{ apache_vhost_file | regex_replace('\.conf$', '') }}-error.log
+    CustomLog ${APACHE_LOG_DIR}/{{ apache_vhost_file | regex_replace('\.conf$', '') }}-access.log combined
+</VirtualHost>

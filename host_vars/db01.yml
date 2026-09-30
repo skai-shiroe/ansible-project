@@ -1,0 +1,3 @@
+---
+# Nœud primaire (maître) du cluster PostgreSQL
+postgresql_node_role: primary

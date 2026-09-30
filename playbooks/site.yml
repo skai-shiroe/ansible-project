@@ -1,0 +1,27 @@
+---
+# =============================================================================
+# Orchestration complète de l'architecture 3-tiers
+# -----------------------------------------------------------------------------
+# Ordre de déploiement :
+#   1. Applications (web Laravel + backoffice Spring Boot)
+#   2. Base de données (PostgreSQL maître/esclave)
+#   3. Cache (Redis)
+#   4. Load balancer (Nginx) en amont des instances web
+#
+# Utilisation :
+#   ansible-playbook -i inventories/aws_ec2.yml playbooks/site.yml
+#   ansible-playbook -i inventories/hosts.yml   playbooks/site.yml
+# =============================================================================
+- import_playbook: applications.yml
+
+- import_playbook: database.yml
+
+- import_playbook: cache.yml
+
+- name: Configurer l'équilibreur de charge (Nginx)
+  hosts: loadbalancers
+  become: true
+
+  roles:
+    - nginx_lb
+

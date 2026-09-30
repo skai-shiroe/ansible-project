@@ -1,0 +1,32 @@
+---
+- name: Installer PHP et les extensions nécessaires
+  ansible.builtin.apt:
+    name: "{{ php_packages }}"
+    state: present
+    update_cache: true
+  notify: Redémarrer PHP-FPM
+
+- name: Configurer le php.ini
+  ansible.builtin.lineinfile:
+    path: "{{ php_ini_file }}"
+    regexp: "^;?{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    state: present
+  loop: "{{ php_ini_settings | dict2items }}"
+  notify: Redémarrer PHP-FPM
+
+- name: Démarrer et activer PHP-FPM
+  ansible.builtin.service:
+    name: "{{ php_fpm_service }}"
+    state: started
+    enabled: true
+
+- name: Vérifier la version de PHP
+  ansible.builtin.command:
+    cmd: php -v
+  register: php_installed_version
+  changed_when: false
+
+- name: Afficher la version de PHP
+  ansible.builtin.debug:
+    var: php_installed_version.stdout_lines

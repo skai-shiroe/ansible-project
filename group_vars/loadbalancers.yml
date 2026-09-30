@@ -1,0 +1,18 @@
+---
+# =========================
+# Nginx (Load Balancer)
+# =========================
+
+nginx_lb_listen_port: 80
+
+nginx_lb_server_name: "_"
+
+# Backends : les instances web du groupe "webservers"
+nginx_lb_backend_servers: "{{ groups['webservers'] | default([]) }}"
+
+nginx_lb_backend_port: 8080
+
+nginx_lb_lb_method: least_conn
+
+# Endpoint de vérification de santé exposé par le load balancer
+nginx_lb_health_check_path: /up

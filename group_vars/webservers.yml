@@ -1,0 +1,38 @@
+---
+# =========================
+# Apache
+# =========================
+
+apache_package: apache2
+
+apache_service: apache2
+
+apache_port: 8080
+
+apache_document_root: /var/www/laravel/public
+
+apache_server_name: "{{ ansible_host }}"
+
+apache_user: www-data
+apache_group: www-data
+
+# rewrite/headers : requis par Laravel
+# proxy/proxy_fcgi/setenvif : requis pour déléguer PHP à PHP-FPM
+apache_modules:
+  - rewrite
+  - headers
+  - proxy
+  - proxy_fcgi
+  - setenvif
+
+# =========================
+# PHP
+# =========================
+
+php_version: "8.5"
+
+# =========================
+# Laravel
+# =========================
+
+laravel_path: /var/www/laravel

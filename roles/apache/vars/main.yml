@@ -1,0 +1,7 @@
+---
+# Constantes internes du rôle (chemins Apache, non destinés à être surchargés)
+apache_conf_dir: /etc/apache2
+apache_sites_available: /etc/apache2/sites-available
+apache_sites_enabled: /etc/apache2/sites-enabled
+apache_ports_file: /etc/apache2/ports.conf
+

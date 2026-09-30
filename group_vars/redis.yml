@@ -1,0 +1,15 @@
+---
+# =========================
+# Redis
+# =========================
+
+redis_port: 6379
+
+redis_bind: "0.0.0.0"
+
+redis_maxmemory: "256mb"
+redis_maxmemory_policy: allkeys-lru
+
+redis_appendonly: "no"
+
+redis_password: "{{ vault_redis_password | default('') }}"

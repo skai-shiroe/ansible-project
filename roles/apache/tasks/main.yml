@@ -1,0 +1,52 @@
+---
+- name: Installer Apache
+  ansible.builtin.apt:
+    name: "{{ apache_package }}"
+    state: present
+    update_cache: true
+
+- name: Activer les modules Apache
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ apache_modules }}"
+  notify: Redémarrer Apache
+
+- name: Configurer le port d'écoute d'Apache
+  ansible.builtin.template:
+    src: apache_ports.conf.j2
+    dest: "{{ apache_ports_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Redémarrer Apache
+
+- name: Déployer le vhost de l'application
+  ansible.builtin.template:
+    src: apache_vhost.conf.j2
+    dest: "{{ apache_sites_available }}/{{ apache_vhost_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Redémarrer Apache
+
+- name: Activer le vhost de l'application
+  ansible.builtin.file:
+    src: "{{ apache_sites_available }}/{{ apache_vhost_file }}"
+    dest: "{{ apache_sites_enabled }}/{{ apache_vhost_file }}"
+    state: link
+  notify: Redémarrer Apache
+
+- name: Démarrer et activer Apache
+  ansible.builtin.service:
+    name: "{{ apache_service }}"
+    state: started
+    enabled: true
+
+- name: Vérifier le statut Apache
+  ansible.builtin.service_facts:
+
+- name: Afficher le statut Apache
+  ansible.builtin.debug:
+    msg: "Apache est actif"
+  when: ansible_facts.services[apache_service + '.service'].state == 'running'

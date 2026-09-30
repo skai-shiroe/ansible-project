@@ -1,0 +1,6 @@
+---
+# Constantes internes du rôle (chemins systemd, non destinés à être surchargés)
+springboot_systemd_dir: /etc/systemd/system
+springboot_service_file: "{{ springboot_app_name }}.service"
+springboot_env_file: "{{ springboot_home }}/{{ springboot_app_name }}.env"
+

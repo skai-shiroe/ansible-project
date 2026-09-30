@@ -1,0 +1,34 @@
+---
+# =========================
+# PostgreSQL
+# =========================
+
+postgresql_version: "17"
+
+postgresql_port: 5432
+
+postgresql_database: laravel
+
+postgresql_user: laravel
+
+postgresql_password: "{{ vault_postgresql_password | default('') }}"
+
+# =========================
+# Dimensionnement du cluster
+# =========================
+
+postgresql_listen_addresses: "*"
+postgresql_max_connections: 200
+postgresql_shared_buffers: "512MB"
+postgresql_effective_cache_size: "2GB"
+
+# =========================
+# Réplication (maître / esclave)
+# =========================
+
+postgresql_replication_user: replicator
+postgresql_replication_password: "{{ vault_postgresql_replication_password | default('') }}"
+
+# Réseaux autorisés à se connecter (à restreindre au VPC en production)
+postgresql_allowed_networks:
+  - 0.0.0.0/0

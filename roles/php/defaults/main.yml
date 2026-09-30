@@ -1,0 +1,26 @@
+---
+# Version de PHP à installer
+php_version: "8.3"
+
+# Service PHP-FPM correspondant à la version
+php_fpm_service: "php{{ php_version }}-fpm"
+
+# Paquets PHP nécessaires à Laravel
+php_packages:
+  - "php{{ php_version }}-cli"
+  - "php{{ php_version }}-fpm"
+  - "php{{ php_version }}-pgsql"
+  - "php{{ php_version }}-mbstring"
+  - "php{{ php_version }}-xml"
+  - "php{{ php_version }}-curl"
+  - "php{{ php_version }}-zip"
+  - "php{{ php_version }}-bcmath"
+  - "php{{ php_version }}-intl"
+
+# Paramètres du php.ini (PHP-FPM)
+php_ini_settings:
+  memory_limit: 256M
+  upload_max_filesize: 64M
+  post_max_size: 64M
+  date.timezone: UTC
+
