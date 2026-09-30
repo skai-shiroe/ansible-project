@@ -1,0 +1,44 @@
+; =============================================================================
+; Configuration PHP-FPM - application Laravel
+; Géré par le rôle Ansible "php" - NE PAS MODIFIER MANUELLEMENT
+;
+; Chargé automatiquement, PHP étant compilé avec un répertoire de scan :
+;   Scan this dir for additional .ini files => /etc/php/<version>/fpm/conf.d
+; On n'écrase donc PAS le php.ini de la distribution.
+; =============================================================================
+
+; --- Protocole ---
+expose_php = Off
+
+; --- Limites applicatives (Laravel / uploads) ---
+memory_limit = {{ php_ini_settings.memory_limit }}
+upload_max_filesize = {{ php_ini_settings.upload_max_filesize }}
+post_max_size = {{ php_ini_settings.post_max_size }}
+max_execution_time = {{ php_max_execution_time }}
+max_input_time = {{ php_max_input_time }}
+
+; --- Gestion des erreurs (conditionnel) ---
+{% if php_display_errors %}
+display_errors = On
+display_startup_errors = On
+error_reporting = E_ALL
+{% else %}
+display_errors = Off
+display_startup_errors = Off
+error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+{% endif %}
+
+; --- Fuseau horaire ---
+{# Clé contenant un point : accès par indice, pas par point ! #}
+date.timezone = {{ php_ini_settings['date.timezone'] }}
+
+; --- OPcache (conditionnel) ---
+{% if php_opcache_enabled %}
+opcache.enable = 1
+opcache.memory_consumption = {{ php_opcache_memory }}
+opcache.max_accelerated_files = {{ php_opcache_max_files }}
+opcache.validate_timestamps = {{ '1' if php_opcache_revalidate else '0' }}
+opcache.revalidate_freq = {{ php_opcache_revalidate_freq }}
+{% else %}
+opcache.enable = 0
+{% endif %}

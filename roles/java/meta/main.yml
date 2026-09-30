@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: skai-shiroe
+  description: Installe le JDK OpenJDK pour les applications Java
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags:
+    - java
+    - openjdk
+    - jdk
+dependencies: []
+

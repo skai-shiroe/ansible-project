@@ -6,6 +6,12 @@ laravel_path: /var/www/laravel
 laravel_repo: "https://github.com/TON_COMPTE/TON_PROJET.git"
 laravel_branch: main
 
+# Le dépôt livré par défaut est un placeholder : on ne tente pas de le cloner.
+# Dès qu'un vrai dépôt est renseigné, cette valeur passe à true et un échec
+# de clonage redevient bloquant (pas de déploiement silencieusement vide).
+laravel_repo_placeholder: "TON_COMPTE/TON_PROJET.git"
+laravel_repo_configured: "{{ laravel_repo | length > 0 and laravel_repo_placeholder not in laravel_repo }}"
+
 # Propriétaire des fichiers
 laravel_owner: www-data
 laravel_group: www-data
@@ -37,3 +43,12 @@ laravel_system_packages:
   - composer
   - git
   - unzip
+
+# Dossiers internes de Laravel devant exister (sinon HTTP 500)
+laravel_writable_dirs:
+  - "storage/app"
+  - "storage/framework/cache"
+  - "storage/framework/sessions"
+  - "storage/framework/views"
+  - "storage/logs"
+  - "bootstrap/cache"

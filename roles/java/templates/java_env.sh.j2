@@ -1,0 +1,5 @@
+#!/bin/sh
+# Géré par le rôle Ansible "java" - NE PAS MODIFIER MANUELLEMENT
+# Rend le JDK installé visible depuis tout le shell du système.
+export JAVA_HOME="{{ java_home }}"
+export PATH="$JAVA_HOME/bin:$PATH"

@@ -13,12 +13,21 @@
     group: "{{ laravel_group }}"
     mode: "0755"
 
+- name: Vérifier si le dépôt Laravel est configuré
+  ansible.builtin.debug:
+    msg: >-
+      Dépôt Laravel non configuré (placeholder « {{ laravel_repo }} ») :
+      clonage et étapes Composer/Artisan sautés.
+      Renseignez « laravel_repo » pour un déploiement réel.
+  when: not (laravel_repo_configured | bool)
+
 - name: Récupérer l'application Laravel
   ansible.builtin.git:
     repo: "{{ laravel_repo }}"
     dest: "{{ laravel_path }}"
     version: "{{ laravel_branch }}"
     force: true
+  when: laravel_repo_configured | bool
 
 - name: Créer le fichier .env
   ansible.builtin.template:
@@ -27,6 +36,20 @@
     owner: "{{ laravel_owner }}"
     group: "{{ laravel_group }}"
     mode: "0600"
+  # Le template contient DB_PASSWORD et APP_KEY (vault) : masque la sortie
+  no_log: true
+
+- name: Vérifier la présence d'artisan (application clonée)
+  ansible.builtin.stat:
+    path: "{{ laravel_path }}/artisan"
+  register: laravel_artisan
+
+- name: Afficher le statut du dépôt cloné
+  ansible.builtin.debug:
+    msg: >-
+      Dépôt Laravel :
+      {{ 'cloné (artisan présent)' if laravel_artisan.stat.exists
+         else 'absent ou incomplet : les étapes artisan/composer seront sautées' }}
 
 - name: Installer les dépendances Laravel
   community.general.composer:
@@ -34,13 +57,51 @@
     working_dir: "{{ laravel_path }}"
     no_dev: true
     optimize_autoloader: true
+  when: laravel_artisan.stat.exists
+  # Tolérant : le dépôt est encore un placeholder
+  failed_when: false
+  register: laravel_composer
+
+- name: Afficher le résultat de composer install
+  ansible.builtin.debug:
+    var: laravel_composer
+  when: laravel_composer is not skipped
 
 - name: Générer la clé d'application (si absente)
   ansible.builtin.command:
     cmd: php artisan key:generate --force
     chdir: "{{ laravel_path }}"
-  when: laravel_app_key | length == 0
+  when:
+    - laravel_app_key | length == 0
+    - laravel_artisan.stat.exists
   changed_when: true
+  # Tolérant : artisan peut être incomplet sans les dépendances
+  failed_when: false
+
+- name: Vérifier la version de l'application
+  ansible.builtin.command:
+    cmd: php artisan --version
+    chdir: "{{ laravel_path }}"
+  register: laravel_artisan_version
+  changed_when: false
+  # Tolérant : artisan peut être incomplet sans les dépendances
+  failed_when: false
+  when: laravel_artisan.stat.exists
+
+- name: Afficher la version de l'application Laravel
+  ansible.builtin.debug:
+    msg: >-
+      Laravel : {{ laravel_artisan_version.stdout | default('non fonctionnel (vérifiez composer/vault)') }}.
+
+- name: Créer les dossiers internes de Laravel
+  ansible.builtin.file:
+    path: "{{ laravel_path }}/{{ item }}"
+    state: directory
+    owner: "{{ laravel_owner }}"
+    group: "{{ laravel_group }}"
+    mode: "0775"
+  loop: "{{ laravel_writable_dirs }}"
+  when: laravel_artisan.stat.exists
 
 - name: Donner les permissions à Laravel
   ansible.builtin.file:

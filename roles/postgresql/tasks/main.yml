@@ -5,13 +5,21 @@
     state: present
     update_cache: true
 
-- name: Appliquer les paramètres de postgresql.conf
-  ansible.builtin.lineinfile:
-    path: "{{ postgresql_conf_file }}"
-    regexp: "^#?{{ item.key }}\\s*="
-    line: "{{ item.key }} = {{ item.value }}"
-    state: present
-  loop: "{{ postgresql_settings | dict2items }}"
+- name: Créer le répertoire des fragments de configuration PostgreSQL
+  ansible.builtin.file:
+    path: "{{ postgresql_conf_include_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Déployer les paramètres PostgreSQL (fragment conf.d)
+  ansible.builtin.template:
+    src: conf.d/10-ansible.conf.j2
+    dest: "{{ postgresql_conf_include_file }}"
+    owner: postgres
+    group: postgres
+    mode: "0640"
   notify: Redémarrer PostgreSQL
 
 - name: Déployer pg_hba.conf
@@ -40,6 +48,8 @@
     state: present
   become: true
   become_user: postgres
+  # Mot de passe dans les arguments : masque la sortie complète de la tâche
+  no_log: true
   when: postgresql_node_role == 'primary'
 
 - name: Créer la base de données applicative
@@ -59,6 +69,8 @@
     state: present
   become: true
   become_user: postgres
+  # Mot de passe dans les arguments : masque la sortie complète de la tâche
+  no_log: true
   when: postgresql_node_role == 'primary'
 
 - name: Créer les slots de réplication physique
@@ -116,6 +128,8 @@
   become_user: postgres
   environment:
     PGPASSWORD: "{{ postgresql_replication_password }}"
+  # Mot de passe transmis dans l'environnement : masque la sortie
+  no_log: true
   when:
     - postgresql_node_role == 'replica'
     - not postgresql_standby_signal.stat.exists
@@ -128,3 +142,65 @@
     enabled: true
   when: postgresql_node_role == 'replica'
 
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Afficher la version de PostgreSQL
+  ansible.builtin.command:
+    cmd: psql --version
+  register: postgresql_client_version
+  changed_when: false
+  # Tolérant : le client psql peut être absent en environnement de simulation
+  failed_when: false
+
+- name: Tester l'accès au cluster local
+  ansible.builtin.command:
+    cmd: pg_lsclusters
+  register: postgresql_clusters
+  changed_when: false
+  # Tolérant : pg_lsclusters n'existe pas hors Debian/Ubuntu
+  failed_when: false
+
+- name: Afficher l'état du cluster local
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL {{ postgresql_client_version.stdout | default('(client absent)') }}
+      : clusters {{ postgresql_clusters.stdout_lines | default(['(inconnu)']) }}.
+
+- name: Vérifier l'état de la réplication (primaire)
+  community.postgresql.postgresql_query:
+    query: >-
+      SELECT client_addr, state, sent_lsn, replay_lsn
+      FROM pg_stat_replication
+  become: true
+  become_user: postgres
+  register: postgresql_replication_state
+  changed_when: false
+  # Tolérant : échoue légitimement sur une réplique (pas de pg_stat_replication)
+  failed_when: false
+  when: postgresql_node_role == 'primary'
+
+- name: Afficher l'état de la réplication
+  ansible.builtin.debug:
+    msg: >-
+      Réplicas connectés :
+      {{ postgresql_replication_state.query_result | default(['(aucun ou nœud non primaire)']) }}.
+  when: postgresql_node_role == 'primary'
+
+- name: Vérifier le mode lecture seule (réplique)
+  community.postgresql.postgresql_query:
+    query: SHOW transaction_read_only
+  become: true
+  become_user: postgres
+  register: postgresql_read_only
+  changed_when: false
+  # Tolérant : échoue si le cluster n'est pas encore démarré
+  failed_when: false
+  when: postgresql_node_role == 'replica'
+
+- name: Afficher le mode de la réplique
+  ansible.builtin.debug:
+    msg: >-
+      Réplique {{ inventory_hostname }} :
+      lecture seule = {{ postgresql_read_only.query_result | first | default({'transaction_read_only': 'inconnue'}) }}.
+  when: postgresql_node_role == 'replica'

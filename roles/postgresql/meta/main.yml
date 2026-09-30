@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: skai-shiroe
+  description: PostgreSQL en maître/esclave avec réplication physique (slots)
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags:
+    - postgresql
+    - database
+    - replication
+dependencies: []
+

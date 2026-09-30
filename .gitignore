@@ -1,2 +1,9 @@
 .vscode
 .ansible
+# --- Secrets et clés (jamais commités en clair) ---
+.vault_pass
+*.vault
+vault_password*
+*.pem
+*.key
+id_rsa*

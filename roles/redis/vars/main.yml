@@ -4,12 +4,3 @@ redis_package: redis-server
 redis_service: redis-server
 redis_conf_file: /etc/redis/redis.conf
 
-# Paramètres appliqués dans redis.conf
-redis_settings:
-  bind: "{{ redis_bind }}"
-  port: "{{ redis_port }}"
-  databases: "{{ redis_databases }}"
-  maxmemory: "{{ redis_maxmemory }}"
-  maxmemory-policy: "{{ redis_maxmemory_policy }}"
-  appendonly: "{{ redis_appendonly }}"
-

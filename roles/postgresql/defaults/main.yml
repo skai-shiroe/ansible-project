@@ -34,15 +34,9 @@ postgresql_packages:
   - "postgresql-contrib-{{ postgresql_version }}"
   - python3-psycopg2
 
-# Paramètres écrits dans postgresql.conf
-postgresql_settings:
-  listen_addresses: "'{{ postgresql_listen_addresses }}'"
-  port: "{{ postgresql_port }}"
-  max_connections: "{{ postgresql_max_connections }}"
-  shared_buffers: "{{ postgresql_shared_buffers }}"
-  effective_cache_size: "{{ postgresql_effective_cache_size }}"
-  wal_level: replica
-  max_wal_senders: 5
-  max_replication_slots: 5
-  hot_standby: "on"
+# Paramètres SQL gérés par le fragment conf.d/10-ansible.conf
+postgresql_wal_level: replica
+postgresql_max_wal_senders: 5
+postgresql_max_replication_slots: 5
+postgresql_hot_standby: "on"
 

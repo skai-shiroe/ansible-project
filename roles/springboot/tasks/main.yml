@@ -22,14 +22,19 @@
     group: "{{ springboot_group }}"
     mode: "0755"
 
+# Le fichier statique provient de roles/springboot/files/ (règle du formateur)
+- name: Vérifier la présence du JAR de l'application
+  ansible.builtin.stat:
+    path: "{{ springboot_home }}/{{ springboot_jar_name }}"
+  register: springboot_jar_stat
 - name: Déployer le JAR de l'application
   ansible.builtin.copy:
-    src: "{{ springboot_jar_source }}"
+    src: "{{ springboot_jar_file }}"
     dest: "{{ springboot_home }}/{{ springboot_jar_name }}"
     owner: "{{ springboot_user }}"
     group: "{{ springboot_group }}"
     mode: "0644"
-  when: springboot_jar_source | length > 0
+  when: springboot_jar_file | length > 0
   notify: Redémarrer Spring Boot
 
 - name: Déployer le fichier d'environnement
@@ -40,6 +45,8 @@
     group: "{{ springboot_group }}"
     mode: "0600"
   notify: Redémarrer Spring Boot
+  # Le template contient SPRING_DATASOURCE_PASSWORD : masque la sortie
+  no_log: true
 
 - name: Déployer l'unité systemd
   ansible.builtin.template:
@@ -56,4 +63,52 @@
     daemon_reload: true
     enabled: true
     state: started
+
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Afficher le statut du JAR de l'application
+  ansible.builtin.debug:
+    msg: >-
+      JAR {{ springboot_jar_name }} :
+      {{ 'déployé (' ~ (springboot_jar_stat.stat.size | default(0) | int) ~ ' octets)'
+         if springboot_jar_stat.stat.exists
+         else 'absent (springboot_jar_file non renseigné : déposez-le dans roles/springboot/files/)' }}
+
+- name: Vérifier la validité de l'unité systemd
+  ansible.builtin.command:
+    cmd: systemd-analyze verify "{{ springboot_systemd_dir }}/{{ springboot_service_file }}"
+  register: springboot_systemd_verify
+  changed_when: false
+  # Tolérant : l'analyse peut échouer sur des distributions anciennes
+  failed_when: false
+  when: springboot_jar_file | length > 0 or springboot_jar_stat.stat.exists | default(false)
+
+- name: Afficher le résultat de la vérification systemd
+  ansible.builtin.debug:
+    var: springboot_systemd_verify.stderr_lines | default([])
+  when: springboot_systemd_verify is not skipped
+
+- name: Vérifier le statut du service Spring Boot
+  ansible.builtin.systemd:
+    name: "{{ springboot_service_name }}"
+  register: springboot_service_status
+  # Tolérant : le service n'existe qu'après le premier déploiement du JAR
+  failed_when: false
+  changed_when: false
+
+- name: Afficher les dernières lignes du journal applicatif
+  ansible.builtin.command:
+    cmd: journalctl -u "{{ springboot_service_name }}" --no-pager -n 5
+  register: springboot_journal
+  changed_when: false
+  # Tolérant : pas de journal sur un service jamais démarré
+  failed_when: false
+
+- name: Afficher le journal applicatif
+  ansible.builtin.debug:
+    msg: >-
+      Service {{ springboot_service_name }} :
+      état={{ springboot_service_status.status.ActiveState | default('inconnu') }}.
+      Journal : {{ springboot_journal.stdout_lines | default(['(vide)']) }}
 

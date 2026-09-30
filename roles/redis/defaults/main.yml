@@ -16,3 +16,13 @@ redis_password: ""
 # Nombre de bases logiques
 redis_databases: 16
 
+# Journalisation
+redis_loglevel: notice
+
+# TLS (conditionnel dans le template) : si activé, désactive le port clair
+redis_tls_enabled: false
+redis_tls_port: 6381
+
+# Persistance AOF
+redis_appendfilename: appendonly.aof
+

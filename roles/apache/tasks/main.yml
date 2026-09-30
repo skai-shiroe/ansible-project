@@ -9,7 +9,7 @@
   community.general.apache2_module:
     name: "{{ item }}"
     state: present
-  loop: "{{ apache_modules }}"
+  loop: "{{ apache_modules_effective }}"
   notify: Redémarrer Apache
 
 - name: Configurer le port d'écoute d'Apache
@@ -35,6 +35,9 @@
     src: "{{ apache_sites_available }}/{{ apache_vhost_file }}"
     dest: "{{ apache_sites_enabled }}/{{ apache_vhost_file }}"
     state: link
+    # Le template crée la source juste avant ; force évite l'échec en
+    # --check (le fichier n'existe pas encore en simulation)
+    force: true
   notify: Redémarrer Apache
 
 - name: Démarrer et activer Apache
@@ -43,10 +46,48 @@
     state: started
     enabled: true
 
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Vérifier la syntaxe de la configuration Apache
+  ansible.builtin.command:
+    cmd: apache2ctl configtest
+  register: apache_config_test
+  changed_when: false
+  # Tolérant : apache2ctl peut répondre différemment selon les distributions
+  failed_when: false
+
+- name: Afficher le résultat du test de configuration Apache
+  ansible.builtin.debug:
+    var: apache_config_test.stderr_lines | default([])
+
+- name: Interroger les modules Apache attendus
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: query
+  loop: "{{ apache_modules_effective }}"
+  register: apache_modules_query
+  changed_when: false
+  # Tolérant : un module peut être absent en environnement de simulation
+  failed_when: false
+
+- name: Afficher l'état des modules Apache
+  ansible.builtin.debug:
+    msg: >-
+      Modules actifs : {{
+        apache_modules_query.results
+        | selectattr('failed', 'undefined')
+        | map(attribute='item') | list }}.
+      Modules en échec : {{
+        apache_modules_query.results
+        | selectattr('failed', 'defined')
+        | selectattr('failed')
+        | map(attribute='item') | list }}.
+
 - name: Vérifier le statut Apache
   ansible.builtin.service_facts:
 
 - name: Afficher le statut Apache
   ansible.builtin.debug:
     msg: "Apache est actif"
-  when: ansible_facts.services[apache_service + '.service'].state == 'running'
+  when: (ansible_facts.services | default({})).get(apache_service + '.service', {}).get('state', '') == 'running'

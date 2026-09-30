@@ -1,18 +1,118 @@
 ---
+# =============================================================================
+# 1. Dépôt APT (PPA ondrej/java : requis pour openjdk-21)
+# =============================================================================
+- name: Installer les prérequis du dépôt APT
+  ansible.builtin.apt:
+    name: "{{ java_apt_prerequisites }}"
+    state: present
+    update_cache: true
+    # Évite un "apt update" systématique à chaque exécution
+    cache_valid_time: "{{ java_apt_cache_valid_time }}"
+    lock_timeout: "{{ java_apt_lock_timeout }}"
+  when: java_apt_repository_enabled | bool
+
+- name: Créer le répertoire des trousseaux APT
+  ansible.builtin.file:
+    path: "{{ java_apt_keyring_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: java_apt_repository_enabled | bool
+
+- name: Télécharger la clé de signature du dépôt ondrej/java
+  ansible.builtin.get_url:
+    url: "{{ java_apt_key_url }}"
+    dest: "{{ java_apt_keyring_dir }}/{{ java_apt_repository_name }}.asc"
+    owner: root
+    group: root
+    mode: "0644"
+  when: java_apt_repository_enabled | bool
+  notify: Mettre à jour le cache APT
+
+- name: Déployer la définition du dépôt (format deb822)
+  ansible.builtin.template:
+    src: "{{ java_apt_repository_name }}.sources.j2"
+    dest: "{{ java_apt_sources_dir }}/{{ java_apt_repository_name }}.sources"
+    owner: root
+    group: root
+    mode: "0644"
+  when: java_apt_repository_enabled | bool
+  notify: Mettre à jour le cache APT
+
+# =============================================================================
+# 2. Installation du JDK
+# =============================================================================
 - name: Installer le JDK OpenJDK
   ansible.builtin.apt:
     name: "{{ java_package }}"
     state: present
-    update_cache: true
+    update_cache: "{{ java_apt_repository_enabled | bool }}"
+    cache_valid_time: "{{ java_apt_cache_valid_time }}"
     lock_timeout: "{{ java_apt_lock_timeout }}"
 
-- name: Vérifier la version de Java
-  ansible.builtin.command:
-    cmd: "{{ java_bin }} -version"
-  register: java_version_check
+# =============================================================================
+# 3. Détection du vrai JAVA_HOME (Option B : robuste, cf. README du rôle)
+# =============================================================================
+- name: Rechercher les répertoires d'installation du JDK
+  ansible.builtin.find:
+    paths: "{{ java_jvm_dir }}"
+    patterns: "java-{{ java_version }}-openjdk-*"
+    file_type: any
+  register: java_jvm_search
   changed_when: false
+  when: java_home_autodetect | bool
+
+- name: Définir JAVA_HOME à partir de la détection
+  ansible.builtin.set_fact:
+    java_home: "{{ java_jvm_search.files | map(attribute='path') | sort | first }}"
+  when:
+    - java_home_autodetect | bool
+    - java_jvm_search.files | length > 0
+
+# =============================================================================
+# 4. Validation explicite (fail-fast) : pas d'échec différé au démarrage
+# =============================================================================
+- name: Vérifier que le répertoire JAVA_HOME existe
+  ansible.builtin.stat:
+    path: "{{ java_home }}"
+  register: java_home_stat
+
+- name: Échouer si JAVA_HOME est introuvable
+  ansible.builtin.assert:
+    that:
+      - java_home_stat.stat.exists
+      - java_home_stat.stat.isdir | default(false)
+    fail_msg: >-
+      Le répertoire {{ java_home }} n'existe pas.
+      Vérifiez java_package ({{ java_package }}) et java_home
+      (recherche dans {{ java_jvm_dir }}).
+    quiet: true
+
+# =============================================================================
+# 5. Environnement système : JAVA_HOME visible depuis tout le shell
+# =============================================================================
+- name: Définir JAVA_HOME pour tout le système
+  ansible.builtin.template:
+    src: java_env.sh.j2
+    dest: "{{ java_profile_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# =============================================================================
+# 6. Vérification que la JVM répond
+# =============================================================================
+- name: Vérifier la version de Java installée
+  ansible.builtin.command:
+    cmd: "{{ java_home }}/bin/java -version"
+  register: java_version_result
+  changed_when: false
+  environment:
+    JAVA_HOME: "{{ java_home }}"
 
 - name: Afficher la version de Java
   ansible.builtin.debug:
-    var: java_version_check.stderr_lines
+    var: java_version_result.stderr_lines
 

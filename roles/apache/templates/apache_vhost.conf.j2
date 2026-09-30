@@ -2,8 +2,20 @@
 # Vhost Apache pour l'application Laravel
 # Géré par le rôle Ansible "apache" - NE PAS MODIFIER MANUELLEMENT
 # =============================================================================
+{% if apache_ssl_enabled %}
+{# HTTPS : activé via apache_ssl_enabled (group_vars du tier web) #}
+<VirtualHost *:{{ apache_ssl_port }}>
+    ServerName {{ apache_server_name }}
+
+    # Certificat TLS
+    SSLEngine on
+    SSLCertificateFile    {{ apache_ssl_cert }}
+    SSLCertificateKeyFile {{ apache_ssl_key }}
+{% else %}
+{# HTTP classique : port d'écoute standard du tier web #}
 <VirtualHost *:{{ apache_port }}>
     ServerName {{ apache_server_name }}
+{% endif %}
     DocumentRoot {{ apache_document_root }}
 
     <Directory {{ apache_document_root }}>

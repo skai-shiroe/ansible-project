@@ -5,23 +5,16 @@
     state: present
     update_cache: true
 
-- name: Appliquer les paramètres Redis
-  ansible.builtin.lineinfile:
-    path: "{{ redis_conf_file }}"
-    regexp: "^#?{{ item.key }} "
-    line: "{{ item.key }} {{ item.value }}"
-    state: present
-  loop: "{{ redis_settings | dict2items }}"
+- name: Déployer la configuration Redis
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: "{{ redis_conf_file }}"
+    owner: redis
+    group: redis
+    mode: "0640"
   notify: Redémarrer Redis
-
-- name: Définir le mot de passe Redis
-  ansible.builtin.lineinfile:
-    path: "{{ redis_conf_file }}"
-    regexp: "^#?requirepass "
-    line: "requirepass {{ redis_password }}"
-    state: present
-  when: redis_password | length > 0
-  notify: Redémarrer Redis
+  # Le template contient le mot de passe (requirepass) : masque la sortie
+  no_log: true
 
 - name: Démarrer et activer Redis
   ansible.builtin.service:
@@ -29,3 +22,51 @@
     state: started
     enabled: true
 
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Afficher la version de Redis
+  ansible.builtin.command:
+    cmd: redis-server --version
+  register: redis_server_version
+  changed_when: false
+  # Tolérant : redis peut être absent en environnement de simulation
+  failed_when: false
+
+- name: Tester Redis sans mot de passe
+  ansible.builtin.command:
+    cmd: redis-cli -p {{ redis_port }} ping
+  register: redis_ping
+  changed_when: false
+  # Tolérant : échoue légitimement si requirepass est actif
+  failed_when: false
+
+- name: Tester Redis avec mot de passe
+  ansible.builtin.command:
+    cmd: redis-cli -p {{ redis_port }} -a {{ redis_password }} ping
+  register: redis_ping_auth
+  changed_when: false
+  # Le mot de passe est dans la commande : masque la sortie
+  no_log: true
+  # Tolérant : sauté si aucun mot de passe, échoue si mot de passe incorrect
+  failed_when: false
+  when: redis_password | length > 0
+
+- name: Afficher l'état de Redis
+  ansible.builtin.debug:
+    msg: >-
+      Redis {{ redis_server_version.stdout | default('(serveur absent)') }}.
+      Ping sans mot de passe : {{ redis_ping.stdout | default('échec (requirepass actif ?)') }}.
+      {% if redis_password | length > 0 %}
+      Ping avec mot de passe :
+      {{ (redis_ping_auth is skipped) | ternary('sauté', redis_ping_auth.stdout | default('(échec)')) }}.
+      {% endif %}
+
+- name: Vérifier le statut du service Redis
+  ansible.builtin.service_facts:
+
+- name: Afficher le statut du service Redis
+  ansible.builtin.debug:
+    msg: >-
+      Service {{ redis_service }} :
+      {{ (ansible_facts.services | default({})).get(redis_service + '.service', {}).get('state', 'inconnu') }}.

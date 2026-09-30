@@ -25,6 +25,9 @@
     src: "{{ nginx_lb_sites_available }}/{{ nginx_lb_site_file }}"
     dest: "{{ nginx_lb_sites_enabled }}/{{ nginx_lb_site_file }}"
     state: link
+    # Le template crée la source juste avant ; force évite l'échec en
+    # --check (le fichier n'existe pas encore en simulation)
+    force: true
   notify: Recharger Nginx
 
 - name: Démarrer et activer Nginx
@@ -32,4 +35,42 @@
     name: "{{ nginx_lb_service }}"
     state: started
     enabled: true
+
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Vérifier la syntaxe de la configuration Nginx
+  ansible.builtin.command:
+    cmd: nginx -t
+  register: nginx_lb_config_test
+  changed_when: false
+  # Tolérant : nginx peut ne pas être installé en environnement de simulation
+  failed_when: false
+
+- name: Afficher le résultat du test de configuration Nginx
+  ansible.builtin.debug:
+    var: nginx_lb_config_test.stderr_lines | default([])
+
+- name: Afficher la version de Nginx
+  ansible.builtin.command:
+    cmd: nginx -v
+  register: nginx_lb_version
+  changed_when: false
+  # Tolérant : même justification
+  failed_when: false
+
+- name: Vérifier le statut du service Nginx
+  ansible.builtin.service_facts:
+
+- name: Afficher le statut Nginx
+  ansible.builtin.debug:
+    msg: >-
+      Nginx :
+      {{ 'actif'
+         if (ansible_facts.services | default({})).get(nginx_lb_service + '.service', {}).get('state', '') == 'running'
+         else 'non démarré (état : '
+              ~ (ansible_facts.services | default({})).get(nginx_lb_service + '.service', {}).get('state', 'inconnu')
+              ~ ')' }}.
+      Upstream {{ nginx_lb_upstream_name }} :
+      {{ nginx_lb_backend_servers | length }} backend(s) sur le port {{ nginx_lb_backend_port }}.
 

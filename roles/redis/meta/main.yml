@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: skai-shiroe
+  description: Redis pour le cache, les sessions et les files d'attente Laravel
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags:
+    - redis
+    - cache
+    - database
+dependencies: []
+

@@ -6,6 +6,9 @@ une application **web publique Laravel**, une application d'administration
 maître/esclave**, avec **Redis** comme cache et **Nginx** comme équilibreur
 de charge.
 
+> **Règles du formateur** → voir [§14 Conventions du projet](#14-conventions-du-projet-règles-du-formateur)
+> et le guide d'installation manuelle [`docs/installation-manuelle.md`](docs/installation-manuelle.md).
+
 ---
 
 ## 1. Architecture cible
@@ -151,7 +154,7 @@ portée**.
 
 | Emplacement | Nature | Exemples |
 |---|---|---|
-| `roles/<r>/defaults/main.yml` | Paramètre **surchargeable** (contrat d'entrée du rôle) | `apache_port: 80`, `php_version: "8.3"` |
+| `roles/<r>/defaults/main.yml` | Paramètre **surchargeable** (contrat d'entrée du rôle) | `apache_port: 80`, `php_version: "8.5"` |
 | `roles/<r>/vars/main.yml` | **Constante interne** au rôle (à ne pas surcharger) | `/etc/apache2/sites-available`, `postgresql_service` |
 | `group_vars/<groupe>.yml` | Valeur **partagée par un tier** (topologie, dimensionnement) | `apache_port: 8080`, `postgresql_max_connections`, liste des backends |
 | `host_vars/<hôte>.yml` | Valeur **propre à une machine** | `postgresql_node_role: primary` / `replica` |
@@ -194,7 +197,7 @@ portée**.
 | `apache` | **Refactoré** | Installe Apache, active les modules (`rewrite`, `proxy_fcgi`…), configure le port 8080 et le vhost Laravel (délégation PHP à PHP-FPM) |
 | `php` | **Refactoré** | Versionné (`php{{ php_version }}`), configure `php.ini`, gère le service PHP-FPM |
 | `laravel` | **Complété** | Déploie le code, génère le `.env`, `composer install`, `key:generate`, permissions |
-| `java` | **Nouveau** | Installe OpenJDK 21 (headless), vérifie la version |
+| `java` | **Complet** | PPA `ondrej/java` (deb822), JDK 21 headless, **détection du vrai `JAVA_HOME`**, `stat` + `assert` (fail-fast), exposition via `/etc/profile.d/java.sh`, `java -version` |
 | `springboot` | **Nouveau** | Utilisateur système dédié, déploiement du JAR, unité **systemd**, fichier d'environnement |
 | `postgresql` | **Nouveau** | Installation, `postgresql.conf`/`pg_hba.conf`, **utilisateur + slots de réplication** (maître), **`pg_basebackup` + standby** (esclave) |
 | `redis` | **Nouveau** | Installe et configure Redis (mémoire, politique d'éviction, `requirepass`) |
@@ -237,9 +240,15 @@ ansible-playbook -i inventories/aws_ec2.yml playbooks/cache.yml
 # 4. Déploiement complet
 AWS_PROFILE=formation-sso ansible-playbook -i inventories/aws_ec2.yml playbooks/site.yml
 
-# 5. Validation hors AWS (inventaire statique)
-ansible-playbook -i inventories/hosts.yml playbooks/site.yml --check --diff
+# 5. Simulation sans AWS (inventaire local, exécution locale sans SSH)
+ansible-playbook -i inventories/local/hosts.yml playbooks/site.yml --check --diff
 ```
+
+> ℹ️ **Artéfact du mode `--check`** : sur une machine où un service n'est pas
+> encore installé (`php8.5-fpm`, `backoffice`…), `--check` s'arrête sur
+> `Could not find the requested service <nom>` car il n'installe rien.
+> En mode réel, le paquet est installé juste avant et le service existe.
+> Pour valider un tier isolément : `--limit webservers|backoffice`.
 
 ---
 
@@ -341,9 +350,39 @@ Sans eux, `ansible-playbook` ignore **toutes** les variables de groupe et d'hôt
 - [ ] **Renommer les `host_vars`** (`db01`/`db02`) selon les tags `Name` réels.
 - [ ] **Remplir puis chiffrer `vault.yml`** (voir §10).
 - [ ] **Trancher l'utilisateur SSH** : `remote_user = ansible` vs `ansible_user: ubuntu`.
-- [ ] **Renseigner `laravel_repo`** (placeholder `TON_COMPTE/TON_PROJET.git`).
-- [ ] **Valider `php_version: 8.5`** (nécessite un dépôt externe, type PPA `ondrej`).
+- [ ] **Renseigner `laravel_repo`** avec le vrai dépôt (placeholder `TON_COMPTE/TON_PROJET.git` ; le clonage est sauté automatiquement tant qu'il n'est pas remplacé).
+- [x] **`php_version: "8.5"` validé** sur Ubuntu 26.04 — les 9 paquets `php8.5-*` sont natifs (`8.5.4-0ubuntu1.3`), aucun dépôt externe requis ; un PPA type `ondrej/php` ne serait nécessaire que sur Ubuntu < 26.04.
 - [ ] **Choisir la stratégie de failover** PostgreSQL (outil dédié ou manuel).
 - [ ] Migrer `tags.*` → `ec2_tags.*` (dépréciation `amazon.aws` après 2026-12-01).
+- [ ] Chiffrer le vault à partir du gabarit `group_vars/all/vault.yml.example`
+      (`ansible-vault encrypt group_vars/all/vault.yml`)
+- [ ] Déposer le JAR dans `roles/springboot/files/` et renseigner `springboot_jar_file`
+
+---
+
+## 14. Conventions du projet (règles du formateur)
+
+| # | Règle | Mise en œuvre dans ce dépôt |
+|---|---|---|
+| **1** | **Faire le manuel avant d'automatiser** | → [`docs/installation-manuelle.md`](docs/installation-manuelle.md) : procédure shell pour chaque tier, **tableau de correspondance *commande manuelle ↔ tâche Ansible*** et checklist de validation. C'est la référence à comparer avec la sortie du `--check`. |
+| **2** | **Sécuriser tokens, mots de passe, clés** | • Gabarit non chiffré : `group_vars/all/vault.yml.example`<br>• `no_log: true` sur les 6 tâches traitant des secrets (user PG applicatif, user de réplication, `pg_basebackup`/`PGPASSWORD`, environnement Spring Boot, template Redis)<br>• `.gitignore` : `.vault_pass`, `*.vault`, `vault_password*`, `*.key`, `*.pem`, `id_rsa*`<br>• Clé SSH surchargeable par `ANSIBLE_PRIVATE_KEY_FILE` |
+| **3** | **Templates `*.conf.j2` pour les fichiers de configuration** | **Aucun `lineinfile` / `blockinfile`** dans les rôles — contrôlé par `grep`. **12 templates Jinja2** dans `roles/*/templates/` (dont `ondrej-java.sources.j2` pour le dépôt APT et `java_env.sh.j2` pour `/etc/profile.d/`), avec des **conditions `{% if %}`** : SSL Apache, OPcache PHP, TLS Redis, `requirepass`, rôle primaire/réplique PostgreSQL, `JAVA_HOME` dans l'environnement Spring Boot. |
+| **4** | **Fichiers statiques dans `roles/<rôle>/files/`** | `ansible.builtin.copy` lit dans le dossier `files/` du rôle (ex. `roles/springboot/files/` pour le JAR, avec son propre `README.md` expliquant la règle et ses limites Git). |
+
+### Ce que « utiliser un module `builtin` » veut dire
+
+`builtin` **n'est pas un gros mot** : `apt`, `service`, `user`, `file`
+(gestion d'un lien symbolique), `command` restent les bons modules.
+
+La règle vise **l'écriture du contenu d'un fichier de configuration** : ce
+travail revient **toujours** à `ansible.builtin.template`, seul outil qui
+permet de **variabiliser** et de **conditionner** la configuration.
+
+| À éviter | À utiliser |
+|---|---|
+| `ansible.builtin.lineinfile` sur un `.conf` / `.ini` / `.properties` | `ansible.builtin.template` + `templates/<fichier>.conf.j2` |
+| `ansible.builtin.copy` sur un fichier modifiable | `ansible.builtin.template` + `templates/<fichier>.conf.j2` |
+| `ansible.builtin.copy` sur un binaire / PDF / image | `ansible.builtin.copy` + `files/<fichier>` ✅ |
+
 
 

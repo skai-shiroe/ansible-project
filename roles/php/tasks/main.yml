@@ -6,13 +6,21 @@
     update_cache: true
   notify: Redémarrer PHP-FPM
 
-- name: Configurer le php.ini
-  ansible.builtin.lineinfile:
-    path: "{{ php_ini_file }}"
-    regexp: "^;?{{ item.key }}\\s*="
-    line: "{{ item.key }} = {{ item.value }}"
-    state: present
-  loop: "{{ php_ini_settings | dict2items }}"
+- name: Créer le répertoire de configuration PHP-FPM
+  ansible.builtin.file:
+    path: "{{ php_conf_d_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Déployer la configuration PHP-FPM (fichier .ini dédié)
+  ansible.builtin.template:
+    src: 99-laravel.ini.j2
+    dest: "{{ php_conf_d_dir }}/{{ php_conf_file }}"
+    owner: root
+    group: root
+    mode: "0644"
   notify: Redémarrer PHP-FPM
 
 - name: Démarrer et activer PHP-FPM
@@ -21,12 +29,28 @@
     state: started
     enabled: true
 
-- name: Vérifier la version de PHP
+# =============================================================================
+# Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
+# =============================================================================
+- name: Afficher la version de PHP
   ansible.builtin.command:
     cmd: php -v
   register: php_installed_version
   changed_when: false
 
-- name: Afficher la version de PHP
+- name: Lister les extensions PHP chargées
+  ansible.builtin.command:
+    cmd: php -m
+  register: php_loaded_modules
+  changed_when: false
+  # Tolérant : php peut être absent en environnement de simulation
+  failed_when: false
+
+- name: Afficher l'état des extensions PHP requises par Laravel
   ansible.builtin.debug:
-    var: php_installed_version.stdout_lines
+    msg: >-
+      Version : {{ php_installed_version.stdout_lines | first | default('inconnue') }}.
+      Extension pdo_pgsql :
+      {{ 'présente' if 'pdo_pgsql' in (php_loaded_modules.stdout_lines | default([]))
+         else 'ABSENTE (la connexion PostgreSQL échouera)' }}.
+      Extensions chargées : {{ php_loaded_modules.stdout_lines | default([]) | length }}.

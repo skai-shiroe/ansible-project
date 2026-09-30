@@ -5,6 +5,31 @@ java_version: "21"
 # Paquet OpenJDK (headless : suffisant pour une application Spring Boot)
 java_package: "openjdk-{{ java_version }}-jdk-headless"
 
-# Répertoire d'installation (JAVA_HOME)
-java_home: "/usr/lib/jvm/java-{{ java_version }}-openjdk-amd64"
+# Architecture du nom de répertoire du JDK sous /usr/lib/jvm
+java_architecture: amd64
+
+# Répertoire d'installation attendu (JAVA_HOME).
+# Sert de repli si la détection automatique ne trouve rien.
+java_home: "/usr/lib/jvm/java-{{ java_version }}-openjdk-{{ java_architecture }}"
+
+# Détecter le vrai JAVA_HOME après installation (Option B : robuste).
+# Si aucun répertoire java-<version>-openjdk-* n'est trouvé, java_home est conservé.
+java_home_autodetect: true
+
+# =========================
+# Dépôt APT (PPA ondrej/java)
+# =========================
+# openjdk-21 n'est pas présent dans les dépôts Ubuntu par défaut (uniquement 17).
+java_apt_repository_enabled: true
+java_apt_repository_name: ondrej-java
+java_apt_repository_uri: "https://ppa.launchpadcontent.net/ondrej/java/ubuntu"
+java_apt_key_url: "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xB8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6"
+
+# Fraîcheur du cache APT (secondes)
+java_apt_cache_valid_time: 3600
+
+# =========================
+# Environnement système
+# =========================
+java_profile_file: /etc/profile.d/java.sh
 

@@ -10,7 +10,7 @@ User={{ springboot_user }}
 Group={{ springboot_group }}
 WorkingDirectory={{ springboot_home }}
 EnvironmentFile={{ springboot_env_file }}
-ExecStart=/usr/bin/java $JAVA_OPTS -jar {{ springboot_home }}/{{ springboot_jar_name }} --server.port={{ springboot_port }}
+ExecStart={{ springboot_java_bin }} $JAVA_OPTS -jar {{ springboot_home }}/{{ springboot_jar_name }} --server.port={{ springboot_port }}
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10

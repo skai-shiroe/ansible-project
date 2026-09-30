@@ -1,6 +1,6 @@
 ---
 # Version de PHP à installer
-php_version: "8.3"
+php_version: "8.5"
 
 # Service PHP-FPM correspondant à la version
 php_fpm_service: "php{{ php_version }}-fpm"
@@ -23,4 +23,17 @@ php_ini_settings:
   upload_max_filesize: 64M
   post_max_size: 64M
   date.timezone: UTC
+
+php_max_execution_time: 60
+php_max_input_time: 60
+
+# Erreurs affichées : à activer uniquement en développement
+php_display_errors: false
+
+# OPcache (conditionnel dans le template)
+php_opcache_enabled: true
+php_opcache_memory: 256
+php_opcache_max_files: 10000
+php_opcache_revalidate: false
+php_opcache_revalidate_freq: 60
 

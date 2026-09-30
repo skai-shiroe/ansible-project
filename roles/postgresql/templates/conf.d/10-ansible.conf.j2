@@ -1,0 +1,30 @@
+# =============================================================================
+# Paramètres PostgreSQL gérés par Ansible (rôle "postgresql")
+# Inclus automatiquement via `include_dir = 'conf.d'` de postgresql.conf
+# NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+
+# --- Réseau ---
+listen_addresses = '{{ postgresql_listen_addresses }}'
+port = {{ postgresql_port }}
+
+# --- Dimensionnement ---
+max_connections = {{ postgresql_max_connections }}
+shared_buffers = {{ postgresql_shared_buffers }}
+effective_cache_size = {{ postgresql_effective_cache_size }}
+
+# --- Réplication (maître / esclave) ---
+wal_level = {{ postgresql_wal_level }}
+max_wal_senders = {{ postgresql_max_wal_senders }}
+max_replication_slots = {{ postgresql_max_replication_slots }}
+
+# --- Basculement : le nœud doit rester accessible en lecture ---
+hot_standby = {{ postgresql_hot_standby }}
+
+{% if postgresql_node_role == 'replica' %}
+# Nœud RÉPLIQUE : refus des écritures accidentelles
+default_transaction_read_only = on
+{% else %}
+# Nœud PRIMAIRE : écritures autorisées
+default_transaction_read_only = off
+{% endif %}

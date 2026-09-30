@@ -11,10 +11,12 @@ apache_port: 8080
 
 apache_document_root: /var/www/laravel/public
 
-apache_server_name: "{{ ansible_host }}"
-
 apache_user: www-data
 apache_group: www-data
+
+# Nom du serveur : on utilise l'hôte d'inventaire (jamais une IP brute,
+# ce serait une mauvaise pratique pour la directive ServerName)
+apache_server_name: "{{ inventory_hostname }}"
 
 # rewrite/headers : requis par Laravel
 # proxy/proxy_fcgi/setenvif : requis pour déléguer PHP à PHP-FPM
@@ -24,6 +26,10 @@ apache_modules:
   - proxy
   - proxy_fcgi
   - setenvif
+
+# HTTPS : passez-le à true pour basculer le vhost en 443 (le module ssl
+# est ajouté automatiquement à apache_modules par le rôle)
+apache_ssl_enabled: false
 
 # =========================
 # PHP

@@ -22,9 +22,18 @@ apache_modules:
   - proxy_fcgi
   - setenvif
 
+# HTTPS (conditionnel, piloté depuis group_vars du tier web)
+apache_ssl_enabled: false
+apache_ssl_port: 443
+apache_ssl_cert: /etc/ssl/certs/ssl-cert-snakeoil.pem
+apache_ssl_key: /etc/ssl/private/ssl-cert-snakeoil.key
+
+# Liste réellement appliquée : ajoute le module "ssl" si HTTPS est actif
+apache_modules_effective: "{{ apache_modules + (['ssl'] if apache_ssl_enabled | bool else []) }}"
+
 # Nom du fichier de vhost
 apache_vhost_file: laravel.conf
 
 # Socket PHP-FPM utilisé par le vhost pour déléguer PHP
-apache_php_fpm_socket: "/run/php/php{{ php_version | default('8.3') }}-fpm.sock"
+apache_php_fpm_socket: "/run/php/php{{ php_version | default('8.5') }}-fpm.sock"
 

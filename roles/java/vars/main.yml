@@ -1,5 +1,12 @@
 ---
 # Constantes internes du rôle (non destinées à être surchargées)
+java_jvm_dir: /usr/lib/jvm
 java_bin: /usr/bin/java
 java_apt_lock_timeout: 300
+java_apt_keyring_dir: /etc/apt/keyrings
+java_apt_sources_dir: /etc/apt/sources.list.d
+java_apt_prerequisites:
+  - ca-certificates
+  - curl
+  - gnupg
 

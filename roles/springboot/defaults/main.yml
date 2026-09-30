@@ -10,11 +10,18 @@ springboot_group: springboot
 # Emplacement de déploiement
 springboot_home: "/opt/{{ springboot_app_name }}"
 springboot_jar_name: "{{ springboot_app_name }}.jar"
-# Chemin/URL local du JAR à déployer (vide = aucun dépôt de binaire)
-springboot_jar_source: ""
+# Nom du fichier déposé dans roles/springboot/files/ (règle "fichiers statiques")
+# Vide = aucune dépose de binaire, la tâche correspondante est sautée.
+# Ex. : backoffice-1.0.0.jar
+springboot_jar_file: ""
 
 # Nom du service systemd
 springboot_service_name: "{{ springboot_app_name }}"
+
+# Binaire Java utilisé par l'unité systemd.
+# java_home est fourni par le rôle java (détecté puis asserté) ; retombe sur
+# le binaire du PATH si le rôle java n'a pas été exécuté dans le play.
+springboot_java_bin: "{{ (java_home ~ '/bin/java') if java_home is defined else 'java' }}"
 
 # Options de la JVM
 springboot_java_opts: "-Xms256m -Xmx512m"

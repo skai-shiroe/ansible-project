@@ -1,0 +1,6 @@
+# Géré par le rôle Ansible "java" - NE PAS MODIFIER MANUELLEMENT
+Types: deb
+URIs: {{ java_apt_repository_uri }}
+Suites: {{ ansible_distribution_release }}
+Components: main
+Signed-By: {{ java_apt_keyring_dir }}/{{ java_apt_repository_name }}.asc

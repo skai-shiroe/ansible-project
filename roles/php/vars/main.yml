@@ -1,6 +1,6 @@
 ---
 # Constantes internes du rôle (chemins PHP, non destinés à être surchargés)
-php_ini_dir: "/etc/php/{{ php_version }}/fpm"
-php_ini_file: "/etc/php/{{ php_version }}/fpm/php.ini"
+php_conf_d_dir: "/etc/php/{{ php_version }}/fpm/conf.d"
+php_conf_file: 99-laravel.ini
 php_socket_dir: /run/php
 

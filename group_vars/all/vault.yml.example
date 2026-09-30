@@ -1,0 +1,28 @@
+# =============================================================================
+# GABARIT DES SECRETS  —  NE PAS CHIFFRER CE FICHIER
+# -----------------------------------------------------------------------------
+# 1. Copiez ce gabarit vers le fichier réel :
+#      cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+# 2. Remplissez les vraies valeurs (jamais commitées en clair).
+# 3. Chiffrez-le :
+#      ansible-vault encrypt group_vars/all/vault.yml
+# 4. Ajoutez le mot de passe du vault à .vault_pass (ignoré par git) :
+#      ansible-playbook ... --vault-password-file .vault_pass
+#
+# Les rôles lisent ces variables via {{ vault_x | default('') }} : tant que le
+# vault est vide, rien ne plante.
+# =============================================================================
+
+# --- PostgreSQL -------------------------------------------------------------
+vault_postgresql_password: "CHANGE_ME_utilisateur_applicatif"
+vault_postgresql_replication_password: "CHANGE_ME_replication"
+
+# --- Laravel ----------------------------------------------------------------
+vault_laravel_db_password: "CHANGE_ME_db_laravel"
+vault_laravel_app_key: "base64:CHANGE_ME_app_key_laravel"
+
+# --- Spring Boot (Backoffice) -----------------------------------------------
+vault_springboot_db_password: "CHANGE_ME_db_backoffice"
+
+# --- Redis ------------------------------------------------------------------
+vault_redis_password: "CHANGE_ME_redis"

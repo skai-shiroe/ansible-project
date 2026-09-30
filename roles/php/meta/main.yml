@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: skai-shiroe
+  description: Installe et configure PHP-FPM via un fichier .ini dédié (conf.d)
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags:
+    - php
+    - php-fpm
+    - laravel
+dependencies: []
+
