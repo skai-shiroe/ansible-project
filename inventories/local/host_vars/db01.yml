@@ -1,0 +1,33 @@
+---
+# =============================================================================
+# [LOCAL] Instance PostgreSQL cloisonnée "db01" — NŒUD PRIMAIRE (maître)
+# -----------------------------------------------------------------------------
+# Chargé par playbooks/local_db.yml (include_vars) : précédence maximale, afin
+# de neutraliser les valeurs AWS de playbooks/host_vars/db01.yml (cluster
+# "main" du port 5432, partagé avec les autres projets de la machine).
+#
+# Cluster Debian dédié : 18/db01
+#   - configuration : /etc/postgresql/18/db01
+#   - données       : /var/lib/postgresql/18/db01
+#   - service       : postgresql@18-db01   (le méta "postgresql" N'EST PAS utilisé)
+#   - port          : 5442 (18-main reste sur 5432)
+# =============================================================================
+postgresql_instance: db01
+postgresql_version: "18"
+postgresql_port: 5442
+postgresql_service: "postgresql@18-db01"
+postgresql_create_cluster: true
+
+# Rôle du nœud dans la topologie de réplication
+postgresql_node_role: primary
+
+# Adresse de la réplique autorisée à se connecter en réplication : sur une seule
+# machine, la connexion arrive par la boucle locale.
+postgresql_replication_allowed_addresses:
+  - 127.0.0.1/32
+
+# Dimensionnement adapté à plusieurs instances sur un poste de travail
+# (les valeurs de group_vars/databases.yml visent un serveur dédié).
+postgresql_max_connections: 100
+postgresql_shared_buffers: "256MB"
+postgresql_effective_cache_size: "1GB"

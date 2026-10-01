@@ -1,0 +1,56 @@
+# =============================================================================
+# Configuration Apache — instance cloisonnée "{{ apache_instance }}"
+# Géré par le rôle Ansible "apache" — NE PAS MODIFIER MANUELLEMENT
+# ServerRoot = {{ apache_conf_dir }} (positionné via -d par l'unité systemd)
+# =============================================================================
+ServerRoot "{{ apache_conf_dir }}"
+
+# --- Exécution ---
+DefaultRuntimeDir ${APACHE_RUN_DIR}
+Mutex file:${APACHE_LOCK_DIR} default
+PidFile ${APACHE_PID_FILE}
+
+Timeout 300
+KeepAlive On
+MaxKeepAliveRequests 100
+KeepAliveTimeout 5
+
+User ${APACHE_RUN_USER}
+Group ${APACHE_RUN_GROUP}
+
+HostnameLookups Off
+ErrorLog ${APACHE_LOG_DIR}/error.log
+LogLevel warn
+
+# --- Formats de logs ---
+LogFormat "%v:%p %h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" vhost_combined
+LogFormat "%h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" combined
+LogFormat "%h %l %u %t \"%r\" %>s %O" common
+LogFormat "%{Referer}i -> %U" referer
+LogFormat "%{User-agent}i" agent
+
+# --- Modules (jeu autonome ; chemins absolus vers les .so système) ---
+# IncludeOptional tolère les fichiers absents (ex. un module sans .conf).
+{% for module in apache_instance_modules %}
+IncludeOptional /etc/apache2/mods-available/{{ module }}.load
+IncludeOptional /etc/apache2/mods-available/{{ module }}.conf
+{% endfor %}
+
+# --- Accès disque ---
+<Directory />
+    Options FollowSymLinks
+    AllowOverride None
+    Require all denied
+</Directory>
+
+<Directory {{ apache_document_root }}>
+    Options FollowSymLinks
+    AllowOverride All
+    Require all granted
+</Directory>
+
+# --- Ports d'écoute (relatif au ServerRoot = {{ apache_conf_dir }}) ---
+Include ports.conf
+
+# --- Hôtes virtuels de cette instance ---
+IncludeOptional sites-enabled/*.conf

@@ -1,0 +1,12 @@
+---
+- name: Redémarrer le worker de file d'attente
+  ansible.builtin.systemd:
+    name: "{{ laravel_queue_worker_service }}"
+    # daemon_reload : l'unité laravel-queue-<instance>.service est nouvelle,
+    # systemd doit la (re)charger avant le restart.
+    daemon_reload: true
+    state: restarted
+  register: laravel_queue_worker_restart
+  # Tolérant en --check uniquement : l'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: laravel_queue_worker_restart is failed and not ansible_check_mode

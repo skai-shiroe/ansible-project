@@ -5,22 +5,106 @@
     state: present
     update_cache: true
 
-- name: Déployer la configuration Redis
+# =============================================================================
+# MODE AWS (défaut) : /etc/redis/redis.conf + méta-service "redis-server".
+# Jamais utilisé en cloisonné (il démarrerait le Redis d'un autre projet).
+# =============================================================================
+- name: Déployer la configuration Redis (mode AWS)
   ansible.builtin.template:
     src: redis.conf.j2
     dest: "{{ redis_conf_file }}"
-    owner: redis
-    group: redis
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
     mode: "0640"
+  when: not redis_instance_enabled | bool
   notify: Redémarrer Redis
   # Le template contient le mot de passe (requirepass) : masque la sortie
   no_log: true
 
-- name: Démarrer et activer Redis
+- name: Démarrer et activer Redis (mode AWS)
   ansible.builtin.service:
     name: "{{ redis_service }}"
     state: started
     enabled: true
+  when: not redis_instance_enabled | bool
+  register: redis_aws_start
+  # Tolérant en --check : le paquet vient d'être « installé en simulation »,
+  # le service peut ne pas exister (artefact documenté dans le README §8).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: redis_aws_start is failed and not ansible_check_mode
+
+# =============================================================================
+# MODE INSTANCE (cloisonné local) : /etc/redis-<instance> + redis-<instance>
+# -----------------------------------------------------------------------------
+# Isolé de A à Z : utilisateur, répertoire de configuration, répertoire de
+# données, port, unité systemd. Le méta-service "redis-server" n'est JAMAIS
+# appelé : il piloterait la base 6379 d'une autre application de la machine.
+# =============================================================================
+- name: "[instance] Créer le groupe d'exécution"
+  ansible.builtin.group:
+    name: "{{ redis_group }}"
+    system: true
+    state: present
+  when: redis_instance_enabled | bool
+
+- name: "[instance] Créer l'utilisateur d'exécution"
+  ansible.builtin.user:
+    name: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+  when: redis_instance_enabled | bool
+
+- name: "[instance] Créer les répertoires de l'instance"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ redis_conf_dir }}"
+      mode: "0750"
+    - path: "{{ redis_dir }}"
+      mode: "0750"
+  when: redis_instance_enabled | bool
+
+- name: "[instance] Déployer la configuration Redis"
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: "{{ redis_conf_file }}"
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0640"
+  when: redis_instance_enabled | bool
+  notify: Redémarrer Redis
+  # Le template contient le mot de passe (requirepass) : masque la sortie
+  no_log: true
+
+- name: "[instance] Déployer l'unité systemd de l'instance"
+  ansible.builtin.template:
+    src: redis.service.j2
+    dest: "{{ redis_systemd_dir }}/{{ redis_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  when: redis_instance_enabled | bool
+  notify: Redémarrer Redis
+
+- name: Démarrer et activer Redis (mode instance)
+  ansible.builtin.systemd:
+    name: "{{ redis_service }}"
+    daemon_reload: true
+    state: started
+    enabled: true
+  when: redis_instance_enabled | bool
+  register: redis_instance_start
+  # Tolérant en --check : le fichier d'unité n'existe pas encore (simulation),
+  # le module ne peut pas trouver le service. En mode réel, tout échec reste
+  # bloquant.
+  failed_when: redis_instance_start is failed and not ansible_check_mode
 
 # =============================================================================
 # Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
@@ -38,29 +122,53 @@
     cmd: redis-cli -p {{ redis_port }} ping
   register: redis_ping
   changed_when: false
-  # Tolérant : échoue légitimement si requirepass est actif
+  # Tolérant : renvoie « NOAUTH » (donc un échec) si requirepass est actif
   failed_when: false
 
+# REDISCLI_AUTH plutôt que -a : le mot de passe ne doit pas apparaître dans la
+# table des processus (ps), lisible par tout utilisateur de la machine.
 - name: Tester Redis avec mot de passe
   ansible.builtin.command:
-    cmd: redis-cli -p {{ redis_port }} -a {{ redis_password }} ping
+    cmd: redis-cli -p {{ redis_port }} ping
+  environment:
+    REDISCLI_AUTH: "{{ redis_password }}"
   register: redis_ping_auth
   changed_when: false
-  # Le mot de passe est dans la commande : masque la sortie
+  # Le mot de passe transite dans l'environnement : masque la sortie
   no_log: true
   # Tolérant : sauté si aucun mot de passe, échoue si mot de passe incorrect
   failed_when: false
   when: redis_password | length > 0
 
+- name: Interroger l'état de Redis (rôle et réplicas)
+  ansible.builtin.command:
+    cmd: redis-cli -p {{ redis_port }} info replication
+  environment: "{{ {'REDISCLI_AUTH': redis_password} if redis_password | length > 0 else {} }}"
+  register: redis_info_replication
+  changed_when: false
+  failed_when: false
+
+- name: Interroger les bases logiques de Redis (keyspace)
+  ansible.builtin.command:
+    cmd: redis-cli -p {{ redis_port }} info keyspace
+  environment: "{{ {'REDISCLI_AUTH': redis_password} if redis_password | length > 0 else {} }}"
+  register: redis_info_keyspace
+  changed_when: false
+  failed_when: false
+
 - name: Afficher l'état de Redis
   ansible.builtin.debug:
     msg: >-
-      Redis {{ redis_server_version.stdout | default('(serveur absent)') }}.
+      Redis {{ redis_server_version.stdout | default('(serveur absent)') }} —
+      instance {{ redis_instance | default('AWS') }} sur le port {{ redis_port }}.
       Ping sans mot de passe : {{ redis_ping.stdout | default('échec (requirepass actif ?)') }}.
       {% if redis_password | length > 0 %}
-      Ping avec mot de passe :
-      {{ (redis_ping_auth is skipped) | ternary('sauté', redis_ping_auth.stdout | default('(échec)')) }}.
+      Ping avec mot de passe : {{ redis_ping_auth.stdout | default('(échec)') }}.
       {% endif %}
+      Réplication :
+      {{ (redis_info_replication.stdout_lines | default([]) | select('match', '^(role|connected_slaves):') | list | join(' ')) | default('(inconnu)', true) }}.
+      Bases logiques :
+      {{ (redis_info_keyspace.stdout_lines | default([]) | reject('match', '^#') | list | join(' ')) | default('(aucune clé : normal sur une instance neuve)', true) }}.
 
 - name: Vérifier le statut du service Redis
   ansible.builtin.service_facts:

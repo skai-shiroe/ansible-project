@@ -1,8 +1,53 @@
 ---
 # Version et écoute
 postgresql_version: "17"
+
+# =============================================================================
+# Mode instance (cloisonnement local) — compatible AWS par défaut
+# -----------------------------------------------------------------------------
+# postgresql_instance = ""     => AWS : une seule instance, cluster "main",
+#                                 service système "postgresql".
+# postgresql_instance = "db01" => cluster Debian dédié "18/db01", service
+#                                 "postgresql@18-db01", port dédié.
+# =============================================================================
+postgresql_instance: ""
+postgresql_instance_enabled: "{{ postgresql_instance | length > 0 }}"
+
+# Nom du cluster Debian (main en AWS, db01/db02 en local)
+postgresql_cluster: "{{ 'main' if postgresql_instance | length == 0 else postgresql_instance }}"
+
+# Service systemd (meta postgresql en AWS, postgresql@version-cluster en local)
+postgresql_service: "{{ 'postgresql' if postgresql_instance | length == 0 else 'postgresql@' ~ postgresql_version ~ '-' ~ postgresql_cluster }}"
+
+# Créer le cluster via pg_createcluster s'il est absent (local uniquement)
+postgresql_create_cluster: false
+
+# Répertoire des sockets Unix (partagé par tous les clusters Debian)
+postgresql_socket_dir: /var/run/postgresql
+
+# Port du primaire pour pg_basebackup (égal au port local en AWS)
+postgresql_primary_port: "{{ postgresql_port }}"
+
 postgresql_port: 5432
 postgresql_listen_addresses: "*"
+
+# =============================================================================
+# Chemins (calculés ; AWS = cluster "main")
+# =============================================================================
+postgresql_conf_dir: "{{ '/etc/postgresql/' ~ postgresql_version ~ '/main' if not postgresql_instance_enabled | bool else '/etc/postgresql/' ~ postgresql_version ~ '/' ~ postgresql_cluster }}"
+postgresql_conf_file: "{{ postgresql_conf_dir }}/postgresql.conf"
+postgresql_conf_include_dir: "{{ postgresql_conf_dir }}/conf.d"
+postgresql_conf_include_file: "{{ postgresql_conf_include_dir }}/10-ansible.conf"
+postgresql_hba_file: "{{ postgresql_conf_dir }}/pg_hba.conf"
+postgresql_data_dir: "{{ '/var/lib/postgresql/' ~ postgresql_version ~ '/main' if not postgresql_instance_enabled | bool else '/var/lib/postgresql/' ~ postgresql_version ~ '/' ~ postgresql_cluster }}"
+postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+
+# Adresses autorisées à ouvrir une connexion de réplication (pg_hba.conf).
+# Vide = déduites des nœuds du groupe "databases" marqués "replica" (leur
+# ansible_host/32) → comportement AWS inchangé.
+# En local cloisonné, primaire et réplique vivent sur la MÊME machine : la
+# réplique se connecte via la boucle locale, donc ['127.0.0.1/32'].
+postgresql_replication_allowed_addresses: []
 
 # Base et utilisateur applicatif
 postgresql_database: laravel

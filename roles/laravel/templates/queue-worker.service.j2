@@ -1,0 +1,38 @@
+# =============================================================================
+# Unité systemd — worker de file d'attente Laravel (instance {{ laravel_instance | default('AWS') }})
+# Géré par le rôle Ansible "laravel" — NE PAS MODIFIER MANUELLEMENT
+#
+# Déployée UNIQUEMENT si `laravel_queue_worker_enabled: true` (opt-in) :
+# QUEUE_CONNECTION={{ laravel_queue_connection }} ne fait que POUSSER les jobs,
+# ce worker est ce qui les consomme.
+#
+# Aucune dépendance d'ordonnancement n'est déclarée vers Redis : le nom de
+# l'unité dépend de l'instance Redis (redis-redis01 en cloisonné), que le rôle
+# laravel ne connaît pas. Laravel réessaie de lui-même si le cache n'est pas
+# encore joignable.
+# =============================================================================
+[Unit]
+Description=Laravel queue worker ({{ laravel_queue_connection }}) - instance {{ laravel_instance | default('AWS') }}
+After=network.target
+
+[Service]
+Type=simple
+
+User={{ laravel_owner }}
+Group={{ laravel_group }}
+WorkingDirectory={{ laravel_path }}
+
+ExecStart=/usr/bin/php artisan queue:work --sleep={{ laravel_queue_worker_sleep }} --tries={{ laravel_queue_worker_tries }} --max-time={{ laravel_queue_worker_max_time }}
+# Rechargement à chaud : le worker termine son job courant puis repart
+ExecReload=/bin/kill -USR2 $MAINPID
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

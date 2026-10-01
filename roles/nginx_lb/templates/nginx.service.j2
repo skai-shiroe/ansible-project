@@ -1,0 +1,33 @@
+# =============================================================================
+# Unité systemd — instance Nginx "{{ nginx_lb_instance }}"
+# Géré par le rôle Ansible "nginx_lb" — NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+[Unit]
+Description=Nginx Load Balancer - instance {{ nginx_lb_instance }}
+After=network.target
+
+[Service]
+Type=simple
+
+# Exécution sous l'utilisateur dédié (port > 1024 : pas besoin de root)
+User={{ nginx_lb_user }}
+Group={{ nginx_lb_group }}
+
+# Runtime isolé : /run/nginx-<instance> (créé par systemd, effacé au reboot)
+RuntimeDirectory=nginx-{{ nginx_lb_instance }}
+RuntimeDirectoryMode=0750
+
+ExecStart=/usr/sbin/nginx -c {{ nginx_lb_conf_dir }}/nginx.conf -g "daemon off;"
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -QUIT $MAINPID
+
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

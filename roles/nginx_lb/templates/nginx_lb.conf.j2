@@ -8,13 +8,16 @@ upstream {{ nginx_lb_upstream_name }} {
 {% elif nginx_lb_lb_method == 'ip_hash' %}
     ip_hash;
 {% endif %}
+{# Port backend par hôte : source unique de vérité = apache_port de chaque #}
+{# instance web (9081/9082 en local, 8080 sur AWS via group_vars) ; repli sur #}
+{# nginx_lb_backend_port si la variable est absente. #}
 {% for server in nginx_lb_backend_servers %}
-    server {{ server }}:{{ nginx_lb_backend_port }} max_fails=3 fail_timeout=30s;
+    server {{ server }}:{{ hostvars[server].apache_port | default(nginx_lb_backend_port) }} {{ nginx_lb_backend_params }};
 {% endfor %}
 }
 
 server {
-    listen {{ nginx_lb_listen_port }};
+    listen {{ (nginx_lb_bind_address ~ ':') if nginx_lb_bind_address | length > 0 else '' }}{{ nginx_lb_listen_port }};
     server_name {{ nginx_lb_server_name }};
 
     # Vérification de santé du load balancer lui-même

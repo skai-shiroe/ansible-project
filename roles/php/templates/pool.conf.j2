@@ -1,0 +1,67 @@
+; =============================================================================
+; Pool PHP-FPM — instance cloisonnée "{{ php_fpm_pool_name }}"
+; Géré par le rôle Ansible "php" — NE PAS MODIFIER MANUELLEMENT
+;
+; Réglages Laravel portés PAR LE POOL (remplace conf.d/99-laravel.ini du mode
+; AWS). Contenu conditionné par php_display_errors et php_opcache_enabled.
+; =============================================================================
+
+[{{ php_fpm_pool_name }}]
+
+; --- Identité des workers ---
+user = {{ php_fpm_user }}
+group = {{ php_fpm_group }}
+
+; --- Écoute : socket Unix dédié à l'instance ---
+listen = {{ php_fpm_socket }}
+listen.owner = {{ php_fpm_user }}
+listen.group = {{ php_fpm_group }}
+listen.mode = 0660
+
+; --- Process manager ---
+pm = {{ php_fpm_pm }}
+pm.max_children = {{ php_fpm_pm_max_children }}
+pm.start_servers = {{ php_fpm_pm_start_servers }}
+pm.min_spare_servers = {{ php_fpm_pm_min_spare_servers }}
+pm.max_spare_servers = {{ php_fpm_pm_max_spare_servers }}
+pm.max_requests = {{ php_fpm_pm_max_requests }}
+
+; --- Journal d'accès du pool ---
+access.log = {{ php_fpm_access_log }}
+catch_workers_output = yes
+
+; --- Protocole ---
+php_admin_flag[expose_php] = off
+
+; --- Limites applicatives (Laravel / uploads) ---
+php_admin_value[memory_limit] = {{ php_ini_settings.memory_limit }}
+php_admin_value[upload_max_filesize] = {{ php_ini_settings.upload_max_filesize }}
+php_admin_value[post_max_size] = {{ php_ini_settings.post_max_size }}
+php_admin_value[max_execution_time] = {{ php_max_execution_time }}
+php_admin_value[max_input_time] = {{ php_max_input_time }}
+
+; --- Gestion des erreurs (conditionnel) ---
+{% if php_display_errors %}
+php_admin_flag[display_errors] = on
+php_admin_flag[display_startup_errors] = on
+php_admin_value[error_reporting] = E_ALL
+{% else %}
+php_admin_flag[display_errors] = off
+php_admin_flag[display_startup_errors] = off
+php_admin_value[error_reporting] = E_ALL & ~E_DEPRECATED & ~E_STRICT
+{% endif %}
+
+; --- Fuseau horaire ---
+{# Clé contenant un point : accès par indice, pas par point ! #}
+php_admin_value[date.timezone] = {{ php_ini_settings['date.timezone'] }}
+
+; --- OPcache (conditionnel) ---
+{% if php_opcache_enabled %}
+php_admin_flag[opcache.enable] = on
+php_admin_value[opcache.memory_consumption] = {{ php_opcache_memory }}
+php_admin_value[opcache.max_accelerated_files] = {{ php_opcache_max_files }}
+php_admin_flag[opcache.validate_timestamps] = {{ 'on' if php_opcache_revalidate else 'off' }}
+php_admin_value[opcache.revalidate_freq] = {{ php_opcache_revalidate_freq }}
+{% else %}
+php_admin_flag[opcache.enable] = off
+{% endif %}

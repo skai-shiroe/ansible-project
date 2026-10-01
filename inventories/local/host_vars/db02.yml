@@ -1,0 +1,38 @@
+---
+# =============================================================================
+# [LOCAL] Instance PostgreSQL cloisonnée "db02" — NŒUD RÉPLIQUE (esclave)
+# -----------------------------------------------------------------------------
+# Chargé par playbooks/local_db.yml (include_vars) : précédence maximale, afin
+# de neutraliser les valeurs AWS de playbooks/host_vars/db02.yml (où le primaire
+# est désigné par le nom "db01", non résolvable sur la machine locale).
+#
+# Cluster Debian dédié : 18/db02
+#   - configuration : /etc/postgresql/18/db02
+#   - données       : /var/lib/postgresql/18/db02
+#   - service       : postgresql@18-db02
+#   - port          : 5443
+# =============================================================================
+postgresql_instance: db02
+postgresql_version: "18"
+postgresql_port: 5443
+postgresql_service: "postgresql@18-db02"
+postgresql_create_cluster: true
+
+# Rôle du nœud dans la topologie de réplication
+postgresql_node_role: replica
+
+# Primaire et réplique sont deux clusters de la même machine : le primaire est
+# joignable sur la boucle locale, mais sur SON port (5442 et non 5443).
+postgresql_primary_host: 127.0.0.1
+postgresql_primary_port: 5442
+
+# Slot de réplication physique créé sur le primaire pour ce nœud.
+# ATTENTION : le primaire (db01) est configuré AVANT db02 (serial: 1) et lit le
+# nom du slot dans playbooks/host_vars/db02.yml (seule source visible à ce
+# moment-là) → les deux fichiers doivent porter LE MÊME nom de slot.
+postgresql_replication_slot: db02_slot
+
+# Dimensionnement adapté à plusieurs instances sur un poste de travail
+postgresql_max_connections: 100
+postgresql_shared_buffers: "256MB"
+postgresql_effective_cache_size: "1GB"

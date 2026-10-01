@@ -18,8 +18,14 @@ host    all             all             {{ network }}    scram-sha-256
 {% endfor %}
 
 # Réplication depuis les nœuds répliques du cluster
+{% if postgresql_replication_allowed_addresses | length > 0 %}
+{% for address in postgresql_replication_allowed_addresses %}
+host    replication     {{ postgresql_replication_user }}    {{ address }}    scram-sha-256
+{% endfor %}
+{% else %}
 {% for host in groups['databases'] | default([]) %}
 {% if hostvars[host].postgresql_node_role | default('') == 'replica' %}
 host    replication     {{ postgresql_replication_user }}    {{ hostvars[host].ansible_host | default(host) }}/32    scram-sha-256
 {% endif %}
 {% endfor %}
+{% endif %}

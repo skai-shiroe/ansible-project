@@ -1,6 +1,13 @@
 ---
 - name: Redémarrer PHP-FPM
-  ansible.builtin.service:
+  ansible.builtin.systemd:
     name: "{{ php_fpm_service }}"
+    # daemon_reload : l'unité php-fpm-<instance>.service est nouvelle en mode
+    # instance, systemd doit la (re)charger avant le restart.
+    daemon_reload: true
     state: restarted
+  register: php_fpm_restart
+  # Tolérant en --check uniquement : l'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: php_fpm_restart is failed and not ansible_check_mode
 

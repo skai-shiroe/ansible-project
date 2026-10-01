@@ -1,0 +1,31 @@
+# =============================================================================
+# Configuration principale Nginx — instance cloisonnée "{{ nginx_lb_instance }}"
+# Géré par le rôle Ansible "nginx_lb" — NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+worker_processes auto;
+
+pid {{ nginx_lb_pid_file }};
+error_log {{ nginx_lb_log_dir }}/error.log warn;
+
+events {
+    worker_connections {{ nginx_lb_worker_connections }};
+}
+
+http {
+    # Types MIME : réutilise la table du paquet (lecture seule)
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log {{ nginx_lb_log_dir }}/access.log;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    # NOTA : pas de directive "user" ici — le master tourne déjà sous
+    # {{ nginx_lb_user }} (unité systemd), la déclarer provoquerait un
+    # avertissement ("the 'user' directive makes sense only if the master
+    # process runs with super-user privileges").
+
+    # Sites de cette instance
+    include {{ nginx_lb_sites_enabled }}/*.conf;
+}

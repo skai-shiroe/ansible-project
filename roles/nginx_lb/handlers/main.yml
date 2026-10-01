@@ -1,6 +1,13 @@
 ---
 - name: Recharger Nginx
-  ansible.builtin.service:
+  ansible.builtin.systemd:
     name: "{{ nginx_lb_service }}"
+    # daemon_reload : l'unité nginx-<instance>.service est nouvelle en mode
+    # instance, systemd doit la (re)charger avant le reload.
+    daemon_reload: true
     state: reloaded
+  register: nginx_lb_reload
+  # Tolérant en --check uniquement : l'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: nginx_lb_reload is failed and not ansible_check_mode
 

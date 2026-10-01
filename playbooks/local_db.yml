@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# [LOCAL] Instances PostgreSQL cloisonnées (db01 primaire / db02 réplique)
+# -----------------------------------------------------------------------------
+# Deux clusters Debian dédiés sur la MÊME machine :
+#   db01 → 18/db01, port 5442, service postgresql@18-db01 (primaire)
+#   db02 → 18/db02, port 5443, service postgresql@18-db02 (réplique)
+# Le cluster « 18-main » (port 5432), partagé par les autres projets de la
+# machine, n'est jamais touché : aucune tâche n'utilise le méta-service
+# "postgresql".
+#
+# Secrets : déchiffrés depuis inventories/local/group_vars/all/vault.yml
+#   ansible-playbook -i inventories/local/hosts.yml playbooks/local_db.yml \
+#     --vault-password-file .vault_pass
+# =============================================================================
+- name: "[LOCAL] Configurer les instances PostgreSQL cloisonnées (maître / esclave)"
+  hosts: databases
+  become: true
+
+  # Primaire et réplique sont deux clusters du MÊME hôte : les configurer en
+  # parallèle provoquerait une course (la réplique a besoin que le primaire soit
+  # prêt : pg_hba, utilisateur de réplication, slot). `serial: 1` force l'ordre
+  # de l'inventaire (db01 puis db02) et fait tourner les handlers (redémarrage)
+  # à la fin de chaque lot, donc AVANT l'initialisation de la réplique.
+  serial: 1
+
+  pre_tasks:
+    - name: "[LOCAL] Charger les variables cloisonnées de l'instance"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../inventories/local/host_vars/{{ inventory_hostname }}.yml"
+      # include_vars (précédence 17) passe AU-DESSUS de playbook/host_vars/
+      # (précédence 9), qui décrit la topologie AWS : sans cela, la réplique
+      # locale chercherait l'hôte "db01" par DNS et viserait le port 5432.
+      # Le fichier est donc propre à l'inventaire local → l'AWS reste inchangé.
+
+  roles:
+    - postgresql

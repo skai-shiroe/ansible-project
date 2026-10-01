@@ -1,0 +1,17 @@
+; =============================================================================
+; Configuration principale PHP-FPM — instance cloisonnée "{{ php_instance }}"
+; Géré par le rôle Ansible "php" — NE PAS MODIFIER MANUELLEMENT
+;
+; NOTA : le fichier de configuration de PHP-FPM n'accepte PAS les commentaires
+; "#" (contrairement aux fichiers .ini PHP). Les directives php_admin_* sont
+; déclarées dans le pool, voir pool.d/{{ php_fpm_pool_file }}.
+;
+; Le php.ini et le répertoire de scan des extensions restent ceux du paquet
+; (partagés, lecture seule). Les réglages propres à l'instance sont portés
+; par le pool (php_admin_value), voir pool.d/{{ php_fpm_pool_file }}.
+; =============================================================================
+[global]
+pid = {{ php_fpm_pid_file }}
+error_log = {{ php_fpm_error_log }}
+daemonize = {{ php_fpm_daemonize | ternary('yes', 'no') }}
+include = {{ php_fpm_pool_dir }}/*.conf

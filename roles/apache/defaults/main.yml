@@ -1,7 +1,20 @@
 ---
-# Paquet et service
+# Paquet
 apache_package: apache2
-apache_service: apache2
+
+# =============================================================================
+# Mode instance (cloisonnement local) — compatible AWS par défaut
+# -----------------------------------------------------------------------------
+# apache_instance = ""      => AWS : une seule instance dans /etc/apache2,
+#                              service système "apache2".
+# apache_instance = "web01" => instance cloisonnée : /etc/apache2-web01,
+#                              service "apache-web01", utilisateur dédié, etc.
+# =============================================================================
+apache_instance: ""
+apache_instance_enabled: "{{ apache_instance | length > 0 }}"
+
+# Service systemd (apache2 en AWS, apache-<instance> en local)
+apache_service: "{{ 'apache2' if apache_instance | length == 0 else 'apache-' ~ apache_instance }}"
 
 # Écoute
 apache_port: 80
@@ -10,17 +23,59 @@ apache_server_name: "{{ inventory_hostname }}"
 # Racine web (document root)
 apache_document_root: /var/www/html
 
-# Utilisateur / groupe du serveur web
+# Utilisateur / groupe d'exécution
 apache_user: www-data
 apache_group: www-data
 
-# Modules à activer (rewrite/headers : Laravel ; proxy_fcgi : PHP-FPM)
+# =============================================================================
+# Chemins (calculés ; AWS = /etc/apache2)
+# =============================================================================
+apache_conf_dir: "{{ '/etc/apache2' if not apache_instance_enabled | bool else '/etc/apache2-' ~ apache_instance }}"
+apache_sites_available: "{{ apache_conf_dir }}/sites-available"
+apache_sites_enabled: "{{ apache_conf_dir }}/sites-enabled"
+apache_ports_file: "{{ apache_conf_dir }}/ports.conf"
+apache_log_dir: "{{ '/var/log/apache2' if not apache_instance_enabled | bool else '/var/log/apache2-' ~ apache_instance }}"
+apache_run_dir: "{{ '/run/apache2' if not apache_instance_enabled | bool else '/run/apache2-' ~ apache_instance }}"
+apache_systemd_dir: /etc/systemd/system
+
+# =============================================================================
+# Modules
+# =============================================================================
+# Mode AWS : modules activés via a2enmod (community.general.apache2_module)
 apache_modules:
   - rewrite
   - headers
   - proxy
   - proxy_fcgi
   - setenvif
+
+# Mode instance : modules chargés directement depuis /etc/apache2/mods-available
+# (jeu autonome, SANS mod_php ni mod_security — on ne dépend pas de l'état système)
+apache_instance_modules:
+  - access_compat
+  - alias
+  - auth_basic
+  - authn_core
+  - authn_file
+  - authz_core
+  - authz_host
+  - authz_user
+  - autoindex
+  - deflate
+  - dir
+  - env
+  - filter
+  - headers
+  - mime
+  - mpm_prefork
+  - negotiation
+  - proxy
+  - proxy_fcgi
+  - reqtimeout
+  - rewrite
+  - setenvif
+  - status
+  - unique_id
 
 # HTTPS (conditionnel, piloté depuis group_vars du tier web)
 apache_ssl_enabled: false

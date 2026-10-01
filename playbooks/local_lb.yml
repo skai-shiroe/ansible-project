@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# [LOCAL] Load balancer Nginx cloisonné (lb01)
+# -----------------------------------------------------------------------------
+# Rôle nginx_lb UNIQUEMENT. Isolé dans son propre playbook comme local_web.yml
+# (Apache) : on ne joue ici ni applications, ni base de données, ni cache.
+# =============================================================================
+- name: "[LOCAL] Configurer le load balancer cloisonné"
+  hosts: loadbalancers
+  become: true
+
+  roles:
+    - nginx_lb

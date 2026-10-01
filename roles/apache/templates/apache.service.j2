@@ -1,0 +1,33 @@
+# =============================================================================
+# Unité systemd — instance Apache "{{ apache_instance }}"
+# Géré par le rôle Ansible "apache" — NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+[Unit]
+Description=Apache HTTP Server - instance {{ apache_instance }}
+After=network.target
+
+[Service]
+Type=simple
+
+# Exécution sous l'utilisateur dédié (port > 1024 : pas besoin de root)
+User={{ apache_user }}
+Group={{ apache_group }}
+
+# Runtime isolé : /run/apache2-<instance> (créé par systemd, effacé au reboot)
+RuntimeDirectory=apache2-{{ apache_instance }}
+RuntimeDirectoryMode=0750
+
+ExecStart=/bin/sh -c '. {{ apache_conf_dir }}/envvars; exec /usr/sbin/apache2 -DFOREGROUND -d {{ apache_conf_dir }}'
+ExecReload=/bin/kill -USR1 $MAINPID
+ExecStop=/bin/kill -WINCH $MAINPID
+
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

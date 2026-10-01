@@ -12,6 +12,7 @@
     owner: postgres
     group: postgres
     mode: "0750"
+  when: not postgresql_instance_enabled | bool
 
 - name: Déployer les paramètres PostgreSQL (fragment conf.d)
   ansible.builtin.template:
@@ -20,6 +21,7 @@
     owner: postgres
     group: postgres
     mode: "0640"
+  when: not postgresql_instance_enabled | bool
   notify: Redémarrer PostgreSQL
 
 - name: Déployer pg_hba.conf
@@ -29,13 +31,97 @@
     owner: postgres
     group: postgres
     mode: "0640"
+  when: not postgresql_instance_enabled | bool
   notify: Redémarrer PostgreSQL
 
-- name: Démarrer et activer PostgreSQL
+- name: Démarrer et activer PostgreSQL (mode AWS)
   ansible.builtin.service:
     name: "{{ postgresql_service }}"
     state: started
     enabled: true
+  when: not postgresql_instance_enabled | bool
+  register: postgresql_aws_start
+  # Tolérant en --check : le paquet vient d'être « installé en simulation »,
+  # le service peut ne pas exister (artefact documenté dans le README §8).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: postgresql_aws_start is failed and not ansible_check_mode
+
+# =============================================================================
+# MODE INSTANCE (cloisonné local) : cluster Debian dédié postgresql@ver-nom
+# - config  : /etc/postgresql/<version>/<cluster>
+# - données : /var/lib/postgresql/<version>/<cluster>
+# - service : postgresql@<version>-<cluster> (JAMAIS le méta "postgresql",
+#             qui démarrerait aussi le 18-main des autres projets)
+# =============================================================================
+- name: "[instance] Vérifier l'existence du cluster Debian"
+  ansible.builtin.stat:
+    path: "{{ postgresql_conf_dir }}"
+  register: postgresql_cluster_conf
+  when: postgresql_instance_enabled | bool
+
+- name: "[instance] Créer le cluster Debian dédié"
+  ansible.builtin.command:
+    cmd: >-
+      pg_createcluster {{ postgresql_version }} {{ postgresql_cluster }}
+      --port {{ postgresql_port }}
+  become: true
+  # pg_createcluster exige les privilèges root (il écrit dans /etc/postgresql et
+  # appelle initdb via su) : PAS de become_user postgres ici.
+  # Non idempotent : gardé par l'absence du répertoire de config.
+  changed_when: true
+  when:
+    - postgresql_instance_enabled | bool
+    - postgresql_create_cluster | bool
+    - not postgresql_cluster_conf.stat.exists
+  notify: Redémarrer PostgreSQL
+
+- name: "[instance] Créer le répertoire des fragments de configuration"
+  ansible.builtin.file:
+    path: "{{ postgresql_conf_include_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  when: postgresql_instance_enabled | bool
+
+- name: "[instance] Déployer les paramètres (fragment conf.d)"
+  ansible.builtin.template:
+    src: conf.d/10-ansible.conf.j2
+    dest: "{{ postgresql_conf_include_file }}"
+    owner: postgres
+    group: postgres
+    mode: "0644"
+  when: postgresql_instance_enabled | bool
+  notify: Redémarrer PostgreSQL
+
+- name: "[instance] Déployer pg_hba.conf"
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_hba_file }}"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  when: postgresql_instance_enabled | bool
+  notify: Redémarrer PostgreSQL
+
+- name: Démarrer et activer PostgreSQL (mode instance)
+  ansible.builtin.systemd:
+    name: "{{ postgresql_service }}"
+    daemon_reload: true
+    state: started
+    enabled: true
+  when: postgresql_instance_enabled | bool
+  register: postgresql_instance_start
+  # Tolérant en --check : l'unité du cluster peut ne pas exister en simulation.
+  # En mode réel, tout échec reste bloquant.
+  failed_when: postgresql_instance_start is failed and not ansible_check_mode
+
+# La configuration (listen_addresses, wal_level, port, pg_hba...) doit être
+# APPLIQUÉE avant toute opération de réplication : la réplique va se connecter au
+# primaire pendant l'exécution du rôle. En local, le redémarrage du cluster
+# primaire est donc forcé ici plutôt qu'en fin de play.
+- name: Appliquer la configuration PostgreSQL avant la réplication
+  ansible.builtin.meta: flush_handlers
 
 # =============================================================================
 # Nœud PRIMAIRE (maître) : utilisateur applicatif, utilisateur de réplication
@@ -45,6 +131,8 @@
   community.postgresql.postgresql_user:
     name: "{{ postgresql_user }}"
     password: "{{ postgresql_password }}"
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
     state: present
   become: true
   become_user: postgres
@@ -56,6 +144,8 @@
   community.postgresql.postgresql_db:
     name: "{{ postgresql_database }}"
     owner: "{{ postgresql_user }}"
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
     state: present
   become: true
   become_user: postgres
@@ -65,6 +155,8 @@
   community.postgresql.postgresql_user:
     name: "{{ postgresql_replication_user }}"
     password: "{{ postgresql_replication_password }}"
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
     role_attr_flags: "REPLICATION,LOGIN"
     state: present
   become: true
@@ -81,6 +173,8 @@
         SELECT 1 FROM pg_replication_slots
         WHERE slot_name = '{{ hostvars[item].postgresql_replication_slot }}'
       )
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
   become: true
   become_user: postgres
   loop: "{{ groups['databases'] | default([]) }}"
@@ -100,12 +194,19 @@
   when: postgresql_node_role == 'replica'
 
 - name: Arrêter PostgreSQL sur la réplique
-  ansible.builtin.service:
+  ansible.builtin.systemd:
     name: "{{ postgresql_service }}"
+    daemon_reload: true
     state: stopped
+  register: postgresql_replica_stop
   when:
     - postgresql_node_role == 'replica'
     - not postgresql_standby_signal.stat.exists
+  # Tolérant en --check : sur un cluster fraîchement créé en simulation, l'unité
+  # n'existe pas. En mode réel, l'échec reste bloquant... sauf si le cluster n'a
+  # jamais démarré (pg_basebackup refuse un répertoire non vide, pas un service
+  # absent) : le message d'erreur de pg_basebackup, lui, restera bloquant.
+  failed_when: postgresql_replica_stop is failed and not ansible_check_mode
 
 - name: Supprimer l'ancien répertoire de données de la réplique
   ansible.builtin.file:
@@ -120,15 +221,42 @@
     cmd: >-
       {{ postgresql_bin_dir }}/pg_basebackup
       -h {{ postgresql_primary_host }}
-      -p {{ postgresql_port }}
+      -p {{ postgresql_primary_port }}
       -D {{ postgresql_data_dir }}
       -U {{ postgresql_replication_user }}
-      -X stream -C -S {{ postgresql_replication_slot }} -R
+      -X stream -S {{ postgresql_replication_slot }} -R
   become: true
   become_user: postgres
   environment:
     PGPASSWORD: "{{ postgresql_replication_password }}"
   # Mot de passe transmis dans l'environnement : masque la sortie
+  no_log: true
+  when:
+    - postgresql_node_role == 'replica'
+    - not postgresql_standby_signal.stat.exists
+  notify: Redémarrer PostgreSQL
+  # PAS d'option -C (--create-slot) : le slot est créé de façon idempotente par
+  # le primaire (tâche "Créer les slots de réplication physique") et
+  # pg_basebackup -C échoue si le slot existe déjà (« An error is raised if the
+  # slot already exists »). -S trouve donc toujours le slot côté primaire.
+
+# `pg_basebackup -R` écrit `standby.signal` + `primary_conninfo` dans
+# postgresql.auto.conf. Selon la version rencontrée, le mot de passe n'y est pas
+# toujours reporté ; or le processus de réplication ne peut pas le saisir
+# interactivement : la réplique échouerait à s'authentifier en scram-sha-256
+# auprès du primaire. Ce filet de sécurité n'écrit QUE si `password=` est
+# absent → idempotent. (Constaté sur PostgreSQL 18.6 : `-R` reporte déjà le mot
+# de passe fourni par PGPASSWORD, la tâche ne modifie donc rien.)
+- name: "[réplique] Ajouter le mot de passe à primary_conninfo"
+  ansible.builtin.replace:
+    path: "{{ postgresql_data_dir }}/postgresql.auto.conf"
+    # Le look-ahead négatif ne matche que si "password=" n'est pas déjà présent.
+    regexp: "^primary_conninfo = '(?!.*password=)"
+    replace: "primary_conninfo = 'password={{ postgresql_replication_password }} "
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  # Mot de passe en clair dans les arguments : masque la sortie de la tâche
   no_log: true
   when:
     - postgresql_node_role == 'replica'
@@ -172,6 +300,8 @@
     query: >-
       SELECT client_addr, state, sent_lsn, replay_lsn
       FROM pg_stat_replication
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
   become: true
   become_user: postgres
   register: postgresql_replication_state
@@ -190,6 +320,8 @@
 - name: Vérifier le mode lecture seule (réplique)
   community.postgresql.postgresql_query:
     query: SHOW transaction_read_only
+    login_port: "{{ postgresql_port }}"
+    login_unix_socket: "{{ postgresql_socket_dir }}"
   become: true
   become_user: postgres
   register: postgresql_read_only

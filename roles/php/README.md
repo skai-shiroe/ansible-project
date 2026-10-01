@@ -9,7 +9,7 @@ Installe **PHP-FPM** et ses extensions, puis configure PHP via un
 |---|---|---|---|
 | `php_version` | `group_vars/webservers.yml` (défaut `defaults` aligné) | `"8.5"` | Version de PHP (native sur Ubuntu 26.04, aucun PPA) |
 | `php_fpm_service` | `defaults` | `php{{ php_version }}-fpm` | Service systemd |
-| `php_packages` | `defaults` | cli, fpm, pgsql, mbstring, xml, curl, zip, bcmath, intl | Paquets |
+| `php_packages` | `defaults` | cli, fpm, pgsql, mbstring, xml, curl, zip, bcmath, intl, **redis** | Paquets (`php{{ php_version }}-redis` = extension `phpredis` requise par les drivers Redis de Laravel) |
 | `php_ini_settings` | `defaults` | memory_limit, upload_max_filesize, post_max_size, date.timezone | Valeurs du `.ini` |
 | `php_display_errors` | `defaults` | `false` | **Conditionnel** : affichage des erreurs |
 | `php_opcache_enabled` | `defaults` | `true` | **Conditionnel** : bloc OPcache |
@@ -35,7 +35,9 @@ donc le fichier est chargé automatiquement et le `php.ini` reste intact.
 - `php -v` : version installée (le rôle **ne force aucune version** :
   `php_version` est surchargeable en `group_vars`).
 - `php -m` (`failed_when: false`) : confirme la présence de `pdo_pgsql`
-  (indispensable à la connexion PostgreSQL de Laravel).
+  (indispensable à la connexion PostgreSQL de Laravel) **et de `redis`**
+  (extension `php8.5-redis`, requise par `SESSION_DRIVER` / `CACHE_STORE` /
+  `QUEUE_CONNECTION` = `redis`).
 
 ## Fichiers statiques
 

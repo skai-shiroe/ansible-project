@@ -1,0 +1,31 @@
+# =============================================================================
+# Unité systemd — instance PHP-FPM "{{ php_instance }}"
+# Géré par le rôle Ansible "php" — NE PAS MODIFIER MANUELLEMENT
+#
+# Le master tourne en root (patron Debian) et les workers tournent sous
+# {{ php_fpm_user }} (directive "user" du pool).
+# =============================================================================
+[Unit]
+Description=PHP {{ php_version }} FastCGI Process Manager - instance {{ php_instance }}
+After=network.target
+
+[Service]
+Type=notify
+
+# Runtime isolé : /run/php-<instance> (créé par systemd, effacé au reboot)
+RuntimeDirectory=php-{{ php_instance }}
+RuntimeDirectoryMode=0755
+
+ExecStart={{ php_fpm_binary }} --nodaemonize --fpm-config {{ php_fpm_conf_file }}
+ExecReload=/bin/kill -USR2 $MAINPID
+
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+---
+# =============================================================================
+# [LOCAL] Cache Redis cloisonné (redis01)
+# -----------------------------------------------------------------------------
+# Instance dédiée : unité redis-redis01, /etc/redis-redis01/redis.conf,
+# /var/lib/redis-redis01, utilisateur redis01, port 6390 sur la boucle locale.
+#
+# Le Redis du port 6379 ET le sentinel 26379 (lancés hors systemd par une autre
+# application de la machine) ne sont JAMAIS touchés : aucune tâche n'utilise le
+# méta-service "redis-server", qui les piloterait.
+#
+# À jouer AVANT playbooks/local_web.yml : le rôle php y installe l'extension
+# php8.5-redis (dont hérite l'instance cloisonnée, le répertoire de scan étant
+# compilé dans le binaire) et recharge php-fpm-web01 / php-fpm-web02.
+#
+#   ansible-playbook -i inventories/local/hosts.yml playbooks/local_cache.yml \
+#     --vault-password-file .vault_pass
+# =============================================================================
+- name: "[LOCAL] Configurer l'instance Redis cloisonnée (cache, sessions, queues)"
+  hosts: redis
+  become: true
+
+  roles:
+    - redis

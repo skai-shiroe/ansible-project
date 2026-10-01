@@ -21,12 +21,51 @@
       Renseignez « laravel_repo » pour un déploiement réel.
   when: not (laravel_repo_configured | bool)
 
+# =============================================================================
+# Déploiement propre (mode instance) : la racine d'application peut contenir
+# la page de validation Apache (index.html) ; git clone exige une cible vide.
+# Le nettoyage n'agit que si l'application n'est PAS déjà déployée
+# (ni artisan ni .git) : il ne détruit jamais une application.
+# =============================================================================
+- name: Vérifier le déploiement existant de l'application
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ laravel_path }}/artisan"
+    - "{{ laravel_path }}/.git"
+  register: laravel_deployed_check
+  when: laravel_instance_enabled | bool
+
+- name: Nettoyer la cible de clone (mode instance)
+  ansible.builtin.file:
+    path: "{{ laravel_path }}"
+    state: absent
+  when:
+    - laravel_instance_enabled | bool
+    - laravel_clean_deploy | bool
+    - laravel_deployed_check is defined
+    - not (laravel_deployed_check.results | default([]) | selectattr('stat.exists') | list | length > 0)
+
+- name: Recréer le répertoire de l'application après nettoyage
+  ansible.builtin.file:
+    path: "{{ laravel_path }}"
+    state: directory
+    owner: "{{ laravel_owner }}"
+    group: "{{ laravel_group }}"
+    mode: "0755"
+  when:
+    - laravel_instance_enabled | bool
+    - laravel_clean_deploy | bool
+    - laravel_deployed_check is defined
+    - not (laravel_deployed_check.results | default([]) | selectattr('stat.exists') | list | length > 0)
+
 - name: Récupérer l'application Laravel
   ansible.builtin.git:
     repo: "{{ laravel_repo }}"
     dest: "{{ laravel_path }}"
     version: "{{ laravel_branch }}"
     force: true
+  become_user: "{{ laravel_owner }}"
   when: laravel_repo_configured | bool
 
 - name: Créer le fichier .env
@@ -57,6 +96,8 @@
     working_dir: "{{ laravel_path }}"
     no_dev: true
     optimize_autoloader: true
+  become_user: "{{ laravel_owner }}"
+  environment: "{{ {'COMPOSER_HOME': laravel_composer_home} if laravel_composer_home | length > 0 else {} }}"
   when: laravel_artisan.stat.exists
   # Tolérant : le dépôt est encore un placeholder
   failed_when: false
@@ -71,6 +112,7 @@
   ansible.builtin.command:
     cmd: php artisan key:generate --force
     chdir: "{{ laravel_path }}"
+  become_user: "{{ laravel_owner }}"
   when:
     - laravel_app_key | length == 0
     - laravel_artisan.stat.exists
@@ -109,3 +151,106 @@
     owner: "{{ laravel_owner }}"
     group: "{{ laravel_group }}"
     recurse: true
+
+# =============================================================================
+# Vérification applicative de la base de données (NON bloquante)
+# -----------------------------------------------------------------------------
+# `artisan db:show` ouvre une VRAIE connexion PDO en lisant le .env de
+# l'instance, avec l'utilisateur de PHP-FPM : c'est la preuve que l'application
+# joint le bon cluster (en cloisonné : 127.0.0.1:5442 et non 5432).
+# La sortie n'expose jamais DB_PASSWORD (contrairement à un DSN complet).
+# Volontairement non bloquante : le tier web est déployé avant le tier données.
+# =============================================================================
+- name: Vérifier la connexion à la base de données
+  ansible.builtin.command:
+    cmd: php artisan db:show
+    chdir: "{{ laravel_path }}"
+  become_user: "{{ laravel_owner }}"
+  environment: "{{ {'COMPOSER_HOME': laravel_composer_home} if laravel_composer_home | length > 0 else {} }}"
+  register: laravel_db_check
+  changed_when: false
+  # Diagnostic : ne doit jamais interrompre le déploiement
+  failed_when: false
+  when: laravel_artisan.stat.exists
+
+- name: Afficher l'état de la connexion à la base de données
+  ansible.builtin.debug:
+    msg: >-
+      Base {{ laravel_db_connection }} :
+      {{ laravel_db_host }}:{{ laravel_db_port }}/{{ laravel_db_database }} —
+      {{ (laravel_db_check.stdout | default('') | truncate(700))
+         if laravel_db_check.rc | default(1) == 0
+         else 'ÉCHEC de connexion : ' ~ (laravel_db_check.stderr | default('') | trim | truncate(300)) }}
+  when: laravel_artisan.stat.exists
+
+# =============================================================================
+# Migrations de schéma — gardées par `laravel_run_migrations`
+# (false par défaut ⇒ AWS inchangé ; activé explicitement dans l'inventaire
+# local). `--force` est requis car APP_ENV=production.
+# =============================================================================
+- name: Jouer les migrations de base de données
+  ansible.builtin.command:
+    cmd: php artisan migrate --force
+    chdir: "{{ laravel_path }}"
+  become_user: "{{ laravel_owner }}"
+  environment: "{{ {'COMPOSER_HOME': laravel_composer_home} if laravel_composer_home | length > 0 else {} }}"
+  register: laravel_migrate
+  # Opération UNIQUE pour le tier : les instances web PARTAGENT la même base
+  # (2 web ↔ 1 primaire), donc deux `migrate` simultanés tenteraient de créer
+  # les mêmes tables — course perdue par le second (« relation "users" already
+  # exists »). Ansible n'exécute une tâche `run_once` que sur le premier hôte.
+  run_once: true
+  when:
+    - laravel_run_migrations | bool
+    - laravel_artisan.stat.exists
+  # « Nothing to migrate » = aucune modification : la tâche reste « ok »
+  changed_when: "'Nothing to migrate' not in laravel_migrate.stdout"
+
+- name: Afficher le résultat des migrations
+  ansible.builtin.debug:
+    msg: "{{ laravel_migrate.stdout | default('') | trim }}"
+  when:
+    - laravel_run_migrations | bool
+    - laravel_artisan.stat.exists
+    # run_once : la variable n'existe que sur l'hôte qui a joué la migration
+    - laravel_migrate is defined
+
+# =============================================================================
+# Worker de file d'attente (OPT-IN : laravel_queue_worker_enabled)
+# -----------------------------------------------------------------------------
+# `QUEUE_CONNECTION=redis` suffit à POUSSER des jobs ; il en faut un pour les
+# consommer. Désactivé par défaut : le rôle n'installe donc aucun service
+# supplémentaire tant que la variable n'est pas passée à true.
+# =============================================================================
+- name: "[worker] Déployer l'unité systemd du worker de file d'attente"
+  ansible.builtin.template:
+    src: queue-worker.service.j2
+    dest: "{{ laravel_queue_worker_conf_dir }}/{{ laravel_queue_worker_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  when: laravel_queue_worker_enabled | bool
+  notify: Redémarrer le worker de file d'attente
+
+- name: "[worker] Démarrer et activer le worker de file d'attente"
+  ansible.builtin.systemd:
+    name: "{{ laravel_queue_worker_service }}"
+    daemon_reload: true
+    state: started
+    enabled: true
+  when: laravel_queue_worker_enabled | bool
+  register: laravel_queue_worker_start
+  # Tolérant en --check : le fichier d'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: laravel_queue_worker_start is failed and not ansible_check_mode
+
+- name: "[worker] Afficher l'état du worker de file d'attente"
+  ansible.builtin.debug:
+    msg: >-
+      {% if laravel_queue_worker_enabled | bool %}
+      Worker {{ laravel_queue_worker_service }} déployé sur la connexion
+      « {{ laravel_queue_connection }} ».
+      {% else %}
+      Worker non déployé (laravel_queue_worker_enabled=false) : les jobs poussés
+      dans Redis s'accumulent sans être consommés.
+      {% endif %}

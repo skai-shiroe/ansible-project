@@ -17,8 +17,20 @@ port {{ redis_port }}
 ############################### GENERAL #######################################
 daemonize no
 supervised no
+pidfile {{ redis_pid_file }}
+dir {{ redis_dir }}
+dbfilename {{ redis_dbfilename }}
+protected-mode {{ redis_protected_mode }}
 loglevel {{ redis_loglevel }}
+# Journalisation : pas de directive "logfile" ⇒ Redis journalise sur la sortie
+# standard, reprise par systemd (consulter : journalctl -u {{ redis_service }}).
 databases {{ redis_databases }}
+{% if redis_socket | length > 0 %}
+
+# Socket Unix (clients locaux uniquement)
+unixsocket {{ redis_socket }}
+unixsocketperm 700
+{% endif %}
 
 ############################# PERSISTENCE #####################################
 {% if redis_appendonly %}

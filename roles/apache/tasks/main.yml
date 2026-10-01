@@ -10,6 +10,8 @@
     name: "{{ item }}"
     state: present
   loop: "{{ apache_modules_effective }}"
+  # a2enmod vise /etc/apache2 partagé : réservé au mode AWS
+  when: not apache_instance_enabled | bool
   notify: Redémarrer Apache
 
 - name: Configurer le port d'écoute d'Apache
@@ -19,6 +21,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: not apache_instance_enabled | bool
   notify: Redémarrer Apache
 
 - name: Déployer le vhost de l'application
@@ -28,6 +31,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: not apache_instance_enabled | bool
   notify: Redémarrer Apache
 
 - name: Activer le vhost de l'application
@@ -38,30 +42,189 @@
     # Le template crée la source juste avant ; force évite l'échec en
     # --check (le fichier n'existe pas encore en simulation)
     force: true
+  when: not apache_instance_enabled | bool
   notify: Redémarrer Apache
 
-- name: Démarrer et activer Apache
+# =============================================================================
+# MODE INSTANCE (cloisonné local) : /etc/apache2-<instance> + apache-<instance>
+# =============================================================================
+- name: "[instance] Créer le groupe d'exécution"
+  ansible.builtin.group:
+    name: "{{ apache_instance }}"
+    system: true
+    state: present
+  when: apache_instance_enabled | bool
+
+- name: "[instance] Créer l'utilisateur d'exécution"
+  ansible.builtin.user:
+    name: "{{ apache_instance }}"
+    group: "{{ apache_instance }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+  when: apache_instance_enabled | bool
+
+- name: "[instance] Créer l'arborescence de configuration"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ apache_conf_dir }}"
+    - "{{ apache_sites_available }}"
+    - "{{ apache_sites_enabled }}"
+  when: apache_instance_enabled | bool
+
+- name: "[instance] Créer le répertoire de logs"
+  ansible.builtin.file:
+    path: "{{ apache_log_dir }}"
+    state: directory
+    owner: "{{ apache_user }}"
+    group: "{{ apache_group }}"
+    mode: "0755"
+  when: apache_instance_enabled | bool
+
+- name: "[instance] Créer la racine web"
+  ansible.builtin.file:
+    path: "{{ apache_document_root }}"
+    state: directory
+    owner: "{{ apache_user }}"
+    group: "{{ apache_group }}"
+    mode: "0755"
+  when: apache_instance_enabled | bool
+
+- name: Démarrer et activer Apache (mode AWS)
   ansible.builtin.service:
     name: "{{ apache_service }}"
     state: started
     enabled: true
+  when: not apache_instance_enabled | bool
+  register: apache_aws_start
+  # Tolérant en --check : le paquet vient d'être « installé en simulation »,
+  # le service peut ne pas exister (artefact documenté dans le README §8).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: apache_aws_start is failed and not ansible_check_mode
+
+- name: "[instance] Déployer apache2.conf"
+  ansible.builtin.template:
+    src: apache2.conf.j2
+    dest: "{{ apache_conf_dir }}/apache2.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Déployer envvars"
+  ansible.builtin.template:
+    src: envvars.j2
+    dest: "{{ apache_conf_dir }}/envvars"
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Configurer le port d'écoute"
+  ansible.builtin.template:
+    src: apache_ports.conf.j2
+    dest: "{{ apache_ports_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Déployer le vhost de l'application"
+  ansible.builtin.template:
+    src: apache_vhost.conf.j2
+    dest: "{{ apache_sites_available }}/{{ apache_vhost_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Activer le vhost de l'application"
+  ansible.builtin.file:
+    src: "{{ apache_sites_available }}/{{ apache_vhost_file }}"
+    dest: "{{ apache_sites_enabled }}/{{ apache_vhost_file }}"
+    state: link
+    # Le template crée la source juste avant ; force évite l'échec en
+    # --check (le fichier n'existe pas encore en simulation)
+    force: true
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Déployer l'unité systemd de l'instance"
+  ansible.builtin.template:
+    src: apache.service.j2
+    dest: "{{ apache_systemd_dir }}/{{ apache_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  notify: Redémarrer Apache
+
+- name: "[instance] Déployer une page d'accueil de validation"
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ apache_document_root }}/index.html"
+    owner: "{{ apache_user }}"
+    group: "{{ apache_group }}"
+    mode: "0644"
+  when: apache_instance_enabled | bool
+  # Aide à la validation locale (sera remplacée par Laravel plus tard).
+
+- name: Démarrer et activer Apache (mode instance)
+  ansible.builtin.systemd:
+    name: "{{ apache_service }}"
+    daemon_reload: true
+    state: started
+    enabled: true
+  when: apache_instance_enabled | bool
+  register: apache_instance_start
+  # Tolérant en --check : le fichier d'unité n'existe pas encore (simulation),
+  # le module ne peut pas trouver le service. En mode réel, tout échec reste
+  # bloquant.
+  failed_when: apache_instance_start is failed and not ansible_check_mode
 
 # =============================================================================
 # Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
 # =============================================================================
-- name: Vérifier la syntaxe de la configuration Apache
+- name: Vérifier la syntaxe de la configuration Apache (mode AWS)
   ansible.builtin.command:
     cmd: apache2ctl configtest
   register: apache_config_test
   changed_when: false
   # Tolérant : apache2ctl peut répondre différemment selon les distributions
   failed_when: false
+  when: not apache_instance_enabled | bool
+
+- name: Vérifier la syntaxe de la configuration Apache (mode instance)
+  ansible.builtin.command:
+    cmd: /usr/sbin/apache2 -t -d {{ apache_conf_dir }}
+  environment:
+    APACHE_RUN_USER: "{{ apache_user }}"
+    APACHE_RUN_GROUP: "{{ apache_group }}"
+    APACHE_PID_FILE: "{{ apache_run_dir }}/apache2.pid"
+    APACHE_RUN_DIR: "{{ apache_run_dir }}"
+    APACHE_LOCK_DIR: "{{ apache_run_dir }}"
+    APACHE_LOG_DIR: "{{ apache_log_dir }}"
+  register: apache_config_test
+  changed_when: false
+  # Tolérant : exécution possible avant la création du répertoire de runtime
+  failed_when: false
+  when: apache_instance_enabled | bool
 
 - name: Afficher le résultat du test de configuration Apache
   ansible.builtin.debug:
     var: apache_config_test.stderr_lines | default([])
 
-- name: Interroger les modules Apache attendus
+- name: Interroger les modules Apache attendus (mode AWS)
   community.general.apache2_module:
     name: "{{ item }}"
     state: query
@@ -70,24 +233,28 @@
   changed_when: false
   # Tolérant : un module peut être absent en environnement de simulation
   failed_when: false
+  when: not apache_instance_enabled | bool
 
-- name: Afficher l'état des modules Apache
+- name: Afficher l'état des modules Apache (mode AWS)
   ansible.builtin.debug:
     msg: >-
       Modules actifs : {{
-        apache_modules_query.results
+        apache_modules_query.results | default([])
         | selectattr('failed', 'undefined')
         | map(attribute='item') | list }}.
       Modules en échec : {{
-        apache_modules_query.results
+        apache_modules_query.results | default([])
         | selectattr('failed', 'defined')
         | selectattr('failed')
         | map(attribute='item') | list }}.
+  when: not apache_instance_enabled | bool
 
 - name: Vérifier le statut Apache
   ansible.builtin.service_facts:
 
 - name: Afficher le statut Apache
   ansible.builtin.debug:
-    msg: "Apache est actif"
-  when: (ansible_facts.services | default({})).get(apache_service + '.service', {}).get('state', '') == 'running'
+    msg: >-
+      Service {{ apache_service }} :
+      {{ (ansible_facts.services | default({})).get(apache_service + '.service', {}).get('state', 'inconnu') }}
+      (port {{ apache_port }}).

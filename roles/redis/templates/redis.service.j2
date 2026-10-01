@@ -1,0 +1,38 @@
+# =============================================================================
+# Unité systemd — instance Redis "{{ redis_instance }}"
+# Géré par le rôle Ansible "redis" — NE PAS MODIFIER MANUELLEMENT
+#
+# Patron Debian : Type=notify + redis-server exécuté au premier plan
+# (--supervised systemd) pour que systemd suive réellement le processus maître.
+# L'instance tourne sous l'utilisateur dédié {{ redis_user }} : le port est
+# supérieur à 1024, aucun privilège n'est nécessaire.
+# =============================================================================
+[Unit]
+Description=Redis key-value store - instance {{ redis_instance }}
+After=network.target
+
+[Service]
+Type=notify
+
+User={{ redis_user }}
+Group={{ redis_group }}
+
+# Runtime isolé : /run/redis-<instance> (contient le pidfile, effacé au reboot)
+RuntimeDirectory=redis-{{ redis_instance }}
+RuntimeDirectoryMode=0750
+
+ExecStart=/usr/bin/redis-server {{ redis_conf_file }} --supervised systemd --daemonize no
+ExecStop=/bin/kill -s TERM $MAINPID
+PIDFile={{ redis_pid_file }}
+
+Restart=on-failure
+RestartSec=3
+
+UMask=0007
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

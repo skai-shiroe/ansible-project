@@ -1,7 +1,10 @@
 ---
-# Constantes internes du rôle (chemins Apache, non destinés à être surchargés)
-apache_conf_dir: /etc/apache2
-apache_sites_available: /etc/apache2/sites-available
-apache_sites_enabled: /etc/apache2/sites-enabled
-apache_ports_file: /etc/apache2/ports.conf
+# =============================================================================
+# Rôle apache — constantes internes
+# -----------------------------------------------------------------------------
+# Les chemins (apache_conf_dir, apache_sites_available/enabled, apache_ports_file)
+# ont été déplacés dans defaults/main.yml : ils doivent être CALCULÉS depuis
+# apache_instance pour permettre le cloisonnement local.
+# La précédence de vars/ (au-dessus de host_vars/group_vars) l'interdisait ici.
+# =============================================================================
 

@@ -1,0 +1,22 @@
+---
+# =============================================================================
+# [LOCAL] Serveurs Web cloisonnés (web01 / web02) : Apache + PHP-FPM + Laravel
+# -----------------------------------------------------------------------------
+# Les 3 rôles du tier web, instances cloisonnées. Les deux instances
+# applicatives partagent LA MÊME base : le primaire PostgreSQL cloisonné
+# `18/db01` (127.0.0.1:5442), déclaré dans inventories/local/hosts.yml — et
+# jamais le port 5432 du cluster système `18-main`.
+# Redis n'est pas encore déployé : sessions/cache/queues restent en
+# "file"/"sync" (bascule vers redis à l'étape Redis).
+# La migration de schéma est jouée UNE SEULE FOIS pour le tier
+# (`laravel_run_migrations: true` + `run_once` dans le rôle laravel) : deux
+# `migrate` simultanés sur une base partagée se disputeraient les mêmes tables.
+# =============================================================================
+- name: "[LOCAL] Configurer les instances web cloisonnées (Apache + PHP + Laravel)"
+  hosts: webservers
+  become: true
+
+  roles:
+    - apache
+    - php
+    - laravel

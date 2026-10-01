@@ -2,6 +2,26 @@
 # Emplacement de l'application
 laravel_path: /var/www/laravel
 
+# =============================================================================
+# Mode instance (cloisonnement local) — compatible AWS par défaut
+# -----------------------------------------------------------------------------
+# laravel_instance = ""      => AWS : déploiement standard dans laravel_path
+#                               (propriétaire www-data).
+# laravel_instance = "web01" => instance cloisonnée : /var/www/web01,
+#                               propriétaire dédié, clonage propre.
+# =============================================================================
+laravel_instance: ""
+laravel_instance_enabled: "{{ laravel_instance | length > 0 }}"
+
+# Nettoyage gardé de la cible de clone (supprime la page de validation Apache
+# et garantit un dossier vide pour git clone). N'agit que si l'application
+# n'est PAS déjà déployée (ni artisan ni .git) : ne détruit jamais une app.
+laravel_clean_deploy: false
+
+# Répertoire COMPOSER_HOME (les utilisateurs web0X sont "nologin" sans HOME).
+# Vide => comportement AWS inchangé (HOME de l'utilisateur SSH).
+laravel_composer_home: ""
+
 # Dépôt Git de l'application (à remplacer par le dépôt réel)
 laravel_repo: "https://github.com/TON_COMPTE/TON_PROJET.git"
 laravel_branch: main
@@ -15,6 +35,9 @@ laravel_repo_configured: "{{ laravel_repo | length > 0 and laravel_repo_placehol
 # Propriétaire des fichiers
 laravel_owner: www-data
 laravel_group: www-data
+
+# Nom affiché dans l'interface et les journaux
+laravel_app_name: Laravel
 
 # Environnement applicatif
 laravel_app_env: production
@@ -37,6 +60,29 @@ laravel_queue_connection: redis
 laravel_redis_host: "{{ groups['redis'][0] | default('127.0.0.1') }}"
 laravel_redis_port: 6379
 laravel_redis_password: "{{ vault_redis_password | default('') }}"
+
+# =============================================================================
+# Worker de file d'attente (OPT-IN)
+# -----------------------------------------------------------------------------
+# `QUEUE_CONNECTION=redis` ne fait que POUSSER des jobs dans Redis : sans worker,
+# ils s'accumulent. Le rôle déploie donc une unité systemd dédiée — mais
+# SEULEMENT si cette variable passe à true, afin qu'aucun service supplémentaire
+# n'apparaisse côté AWS par défaut.
+# =============================================================================
+laravel_queue_worker_enabled: false
+laravel_queue_worker_service: >-
+  {{ 'laravel-queue' if not laravel_instance_enabled | bool
+     else 'laravel-queue-' ~ laravel_instance }}
+laravel_queue_worker_conf_dir: /etc/systemd/system
+laravel_queue_worker_sleep: 3
+laravel_queue_worker_tries: 3
+laravel_queue_worker_max_time: 3600
+
+# Migrations de base de données : DÉSACTIVÉ par défaut.
+# Le rôle ne modifie donc jamais le schéma d'une base existante côté AWS.
+# Activé explicitement dans l'inventaire local (inventories/local/hosts.yml,
+# `laravel_run_migrations: true`) une fois la base joignable.
+laravel_run_migrations: false
 
 # Paquets système nécessaires au déploiement
 laravel_system_packages:

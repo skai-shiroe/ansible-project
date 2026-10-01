@@ -1,0 +1,14 @@
+# =============================================================================
+# Variables d'environnement Apache — instance "{{ apache_instance }}"
+# Géré par le rôle Ansible "apache" — NE PAS MODIFIER MANUELLEMENT
+# =============================================================================
+unset HOME
+
+export APACHE_RUN_USER={{ apache_user }}
+export APACHE_RUN_GROUP={{ apache_group }}
+export APACHE_PID_FILE={{ apache_run_dir }}/apache2.pid
+export APACHE_RUN_DIR={{ apache_run_dir }}
+export APACHE_LOCK_DIR={{ apache_run_dir }}
+export APACHE_LOG_DIR={{ apache_log_dir }}
+
+export LANG=C.UTF-8

@@ -2,8 +2,62 @@
 # Version de PHP à installer
 php_version: "8.5"
 
-# Service PHP-FPM correspondant à la version
-php_fpm_service: "php{{ php_version }}-fpm"
+# =============================================================================
+# Mode instance (cloisonnement local) — compatible AWS par défaut
+# -----------------------------------------------------------------------------
+# php_instance = ""      => AWS : une seule instance dans /etc/php/<ver>/fpm,
+#                           service système "php<ver>-fpm".
+# php_instance = "web01" => instance cloisonnée : /etc/php-web01/fpm,
+#                           service "php-fpm-web01", pool dédié, socket dédié.
+# =============================================================================
+php_instance: ""
+php_instance_enabled: "{{ php_instance | length > 0 }}"
+
+# Service PHP-FPM (php<version>-fpm en AWS, php-fpm-<instance> en local)
+php_fpm_service: "{{ 'php' ~ php_version ~ '-fpm' if php_instance | length == 0 else 'php-fpm-' ~ php_instance }}"
+
+# Binaire PHP-FPM correspondant à la version
+php_fpm_binary: "/usr/sbin/php-fpm{{ php_version }}"
+
+# Répertoire de scan des .ini (extensions) utilisé par les vérifications
+php_fpm_scan_dir: "{{ '/etc/php/' ~ php_version ~ '/fpm/conf.d' if not php_instance_enabled | bool else '/etc/php-' ~ php_instance ~ '/fpm/conf.d' }}"
+
+# =============================================================================
+# Chemins (calculés ; AWS = /etc/php/<version>/fpm)
+# =============================================================================
+php_fpm_conf_dir: "{{ '/etc/php/' ~ php_version ~ '/fpm' if not php_instance_enabled | bool else '/etc/php-' ~ php_instance ~ '/fpm' }}"
+php_fpm_conf_file: "{{ php_fpm_conf_dir }}/php-fpm.conf"
+php_fpm_pool_dir: "{{ php_fpm_conf_dir }}/pool.d"
+
+# Nom du pool et fichier de pool
+php_fpm_pool_name: "{{ 'www' if not php_instance_enabled | bool else php_instance }}"
+php_fpm_pool_file: "{{ php_fpm_pool_name }}.conf"
+
+# Écoute : socket Unix dédié par instance
+php_fpm_socket: "{{ '/run/php/php' ~ php_version ~ '-fpm.sock' if not php_instance_enabled | bool else '/run/php-' ~ php_instance ~ '/php-fpm.sock' }}"
+
+# Utilisateur / groupe des workers du pool
+php_fpm_user: www-data
+php_fpm_group: www-data
+
+# Runtime / logs / pid
+php_fpm_run_dir: "{{ '/run/php' if not php_instance_enabled | bool else '/run/php-' ~ php_instance }}"
+php_fpm_pid_file: "{{ php_fpm_run_dir }}/php{{ php_version }}-fpm.pid"
+php_fpm_log_dir: "{{ '/var/log' if not php_instance_enabled | bool else '/var/log/php-' ~ php_instance }}"
+php_fpm_error_log: "{{ php_fpm_log_dir }}/php-fpm.log"
+php_fpm_systemd_dir: /etc/systemd/system
+
+# Divers
+php_fpm_daemonize: false
+php_fpm_access_log: "{{ php_fpm_log_dir }}/{{ php_fpm_pool_name }}-access.log"
+
+# Tuning du pool (pm)
+php_fpm_pm: dynamic
+php_fpm_pm_max_children: 5
+php_fpm_pm_start_servers: 2
+php_fpm_pm_min_spare_servers: 1
+php_fpm_pm_max_spare_servers: 3
+php_fpm_pm_max_requests: 500
 
 # Paquets PHP nécessaires à Laravel
 php_packages:
@@ -16,6 +70,10 @@ php_packages:
   - "php{{ php_version }}-zip"
   - "php{{ php_version }}-bcmath"
   - "php{{ php_version }}-intl"
+  # Client Redis de Laravel (env.j2 : REDIS_CLIENT=phpredis). Le répertoire de
+  # scan des extensions est COMPILÉ dans le binaire (/etc/php/<version>/fpm/conf.d)
+  # et donc PARTAGÉ : l'instance cloisonnée en hérite sans configuration.
+  - "php{{ php_version }}-redis"
 
 # Paramètres du php.ini (PHP-FPM)
 php_ini_settings:

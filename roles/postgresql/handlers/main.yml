@@ -1,6 +1,13 @@
 ---
 - name: Redémarrer PostgreSQL
-  ansible.builtin.service:
+  ansible.builtin.systemd:
     name: "{{ postgresql_service }}"
+    # daemon_reload : l'unité postgresql@version-cluster est nouvelle en mode
+    # instance, systemd doit la (re)charger avant le restart.
+    daemon_reload: true
     state: restarted
+  register: postgresql_restart
+  # Tolérant en --check uniquement : l'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: postgresql_restart is failed and not ansible_check_mode
 

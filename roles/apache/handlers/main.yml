@@ -1,5 +1,12 @@
 ---
 - name: Redémarrer Apache
-  ansible.builtin.service:
+  ansible.builtin.systemd:
     name: "{{ apache_service }}"
+    # daemon_reload : l'unité apache-<instance>.service est nouvelle en mode
+    # instance, systemd doit la (re)charger avant le restart.
+    daemon_reload: true
     state: restarted
+  register: apache_restart
+  # Tolérant en --check uniquement : l'unité n'existe pas encore (simulation).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: apache_restart is failed and not ansible_check_mode

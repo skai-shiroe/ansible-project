@@ -1,6 +1,10 @@
 ---
-# Constantes internes du rôle (chemins PHP, non destinés à être surchargés)
-php_conf_d_dir: "/etc/php/{{ php_version }}/fpm/conf.d"
-php_conf_file: 99-laravel.ini
-php_socket_dir: /run/php
+# =============================================================================
+# Rôle php — constantes internes
+# -----------------------------------------------------------------------------
+# Les chemins (php_fpm_conf_dir, php_fpm_pool_dir, php_fpm_socket, ...) ont été
+# déplacés dans defaults/main.yml : ils doivent être CALCULÉS depuis
+# php_instance pour permettre le cloisonnement local.
+# La précédence de vars/ (au-dessus de host_vars/group_vars) l'interdisait ici.
+# =============================================================================
 

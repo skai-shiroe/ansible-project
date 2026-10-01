@@ -13,6 +13,8 @@
     owner: root
     group: root
     mode: "0755"
+  # /etc/php/<version>/fpm/conf.d partagé : réservé au mode AWS
+  when: not php_instance_enabled | bool
 
 - name: Déployer la configuration PHP-FPM (fichier .ini dédié)
   ansible.builtin.template:
@@ -21,13 +23,105 @@
     owner: root
     group: root
     mode: "0644"
+  # Le conf.d partagé (lu par le master système) est réservé au mode AWS
+  when: not php_instance_enabled | bool
   notify: Redémarrer PHP-FPM
 
-- name: Démarrer et activer PHP-FPM
+- name: Démarrer et activer PHP-FPM (mode AWS)
   ansible.builtin.service:
     name: "{{ php_fpm_service }}"
     state: started
     enabled: true
+  when: not php_instance_enabled | bool
+  register: php_aws_start
+  # Tolérant en --check : le paquet vient d'être « installé en simulation »,
+  # le service peut ne pas exister (artefact documenté dans le README §8).
+  # En mode réel, tout échec reste bloquant.
+  failed_when: php_aws_start is failed and not ansible_check_mode
+
+# =============================================================================
+# MODE INSTANCE (cloisonné local) : /etc/php-<instance>/fpm + php-fpm-<instance>
+# =============================================================================
+- name: "[instance] Créer le groupe d'exécution"
+  ansible.builtin.group:
+    name: "{{ php_instance }}"
+    system: true
+    state: present
+  when: php_instance_enabled | bool
+
+- name: "[instance] Créer l'utilisateur d'exécution"
+  ansible.builtin.user:
+    name: "{{ php_instance }}"
+    group: "{{ php_instance }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+  when: php_instance_enabled | bool
+
+- name: "[instance] Créer l'arborescence de configuration"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ php_fpm_conf_dir }}"
+    - "{{ php_fpm_pool_dir }}"
+  when: php_instance_enabled | bool
+
+- name: "[instance] Créer le répertoire de logs"
+  ansible.builtin.file:
+    path: "{{ php_fpm_log_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: php_instance_enabled | bool
+
+- name: "[instance] Déployer la configuration principale php-fpm.conf"
+  ansible.builtin.template:
+    src: php-fpm.conf.j2
+    dest: "{{ php_fpm_conf_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: php_instance_enabled | bool
+  notify: Redémarrer PHP-FPM
+
+- name: "[instance] Déployer le pool de l'instance"
+  ansible.builtin.template:
+    src: pool.conf.j2
+    dest: "{{ php_fpm_pool_dir }}/{{ php_fpm_pool_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: php_instance_enabled | bool
+  notify: Redémarrer PHP-FPM
+
+- name: "[instance] Déployer l'unité systemd de l'instance"
+  ansible.builtin.template:
+    src: php-fpm.service.j2
+    dest: "{{ php_fpm_systemd_dir }}/{{ php_fpm_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  when: php_instance_enabled | bool
+  notify: Redémarrer PHP-FPM
+
+- name: Démarrer et activer PHP-FPM (mode instance)
+  ansible.builtin.systemd:
+    name: "{{ php_fpm_service }}"
+    daemon_reload: true
+    state: started
+    enabled: true
+  when: php_instance_enabled | bool
+  register: php_instance_start
+  # Tolérant en --check : le fichier d'unité n'existe pas encore (simulation),
+  # le module ne peut pas trouver le service. En mode réel, tout échec reste
+  # bloquant.
+  failed_when: php_instance_start is failed and not ansible_check_mode
 
 # =============================================================================
 # Vérifications non bloquantes : diagnostiquent sans interrompre le déploiement
@@ -37,6 +131,22 @@
     cmd: php -v
   register: php_installed_version
   changed_when: false
+  # Tolérant : php peut être absent en environnement de simulation
+  failed_when: false
+
+- name: Vérifier la syntaxe de la configuration PHP-FPM (mode instance)
+  ansible.builtin.command:
+    cmd: "{{ php_fpm_binary }} -t -y {{ php_fpm_conf_file }}"
+  register: php_fpm_config_test
+  changed_when: false
+  # Tolérant : exécution possible avant le premier déploiement complet
+  failed_when: false
+  when: php_instance_enabled | bool
+
+- name: Afficher le résultat du test de configuration PHP-FPM (mode instance)
+  ansible.builtin.debug:
+    var: php_fpm_config_test.stderr_lines | default([])
+  when: php_instance_enabled | bool
 
 - name: Lister les extensions PHP chargées
   ansible.builtin.command:
@@ -53,4 +163,7 @@
       Extension pdo_pgsql :
       {{ 'présente' if 'pdo_pgsql' in (php_loaded_modules.stdout_lines | default([]))
          else 'ABSENTE (la connexion PostgreSQL échouera)' }}.
+      Extension redis :
+      {{ 'présente' if 'redis' in (php_loaded_modules.stdout_lines | default([]))
+         else 'ABSENTE (sessions, cache et files Redis échoueront)' }}.
       Extensions chargées : {{ php_loaded_modules.stdout_lines | default([]) | length }}.

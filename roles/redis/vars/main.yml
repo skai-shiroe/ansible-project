@@ -1,6 +1,11 @@
 ---
-# Constantes internes du rôle (paquet, service, chemins Redis)
-redis_package: redis-server
-redis_service: redis-server
-redis_conf_file: /etc/redis/redis.conf
+# =============================================================================
+# Rôle redis — constantes internes
+# -----------------------------------------------------------------------------
+# Les chemins (redis_conf_dir, redis_conf_file, redis_dir, redis_pid_file,
+# redis_service, redis_user...) ont été déplacés dans defaults/main.yml : ils
+# doivent être CALCULÉS depuis redis_instance pour permettre le cloisonnement
+# local. La précédence de vars/ (au-dessus de host_vars/group_vars) l'interdisait
+# ici : un inventaire n'aurait jamais pu les surcharger.
+# =============================================================================
 

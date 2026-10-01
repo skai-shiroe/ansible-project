@@ -1,18 +1,58 @@
 ---
-# Paquet et service
+# Paquet
 nginx_lb_package: nginx
-nginx_lb_service: nginx
+
+# =============================================================================
+# Mode instance (cloisonnement local) — compatible AWS par défaut
+# -----------------------------------------------------------------------------
+# nginx_lb_instance = ""     => AWS : une seule instance dans /etc/nginx,
+#                               service système "nginx".
+# nginx_lb_instance = "lb01" => instance cloisonnée : /etc/nginx-lb01,
+#                               service "nginx-lb01", utilisateur dédié, etc.
+# =============================================================================
+nginx_lb_instance: ""
+nginx_lb_instance_enabled: "{{ nginx_lb_instance | length > 0 }}"
+
+# Service systemd (nginx en AWS, nginx-<instance> en local)
+nginx_lb_service: "{{ 'nginx' if nginx_lb_instance | length == 0 else 'nginx-' ~ nginx_lb_instance }}"
 
 # Écoute
 nginx_lb_listen_port: 80
 nginx_lb_server_name: "_"
+# Adresse d'écoute explicite (vide = toutes les interfaces)
+nginx_lb_bind_address: ""
 
 # Upstream (backends web)
 nginx_lb_upstream_name: laravel_web
 nginx_lb_backend_servers: []
+# Repli si hostvars[<hôte>].apache_port est absent
 nginx_lb_backend_port: 8080
+# Options communes des directives "server" de l'upstream
+nginx_lb_backend_params: max_fails=3 fail_timeout=30s
 # round_robin | least_conn | ip_hash
 nginx_lb_lb_method: least_conn
+
+# =============================================================================
+# Chemins (calculés ; AWS = /etc/nginx)
+# =============================================================================
+nginx_lb_conf_dir: "{{ '/etc/nginx' if not nginx_lb_instance_enabled | bool else '/etc/nginx-' ~ nginx_lb_instance }}"
+nginx_lb_sites_available: "{{ nginx_lb_conf_dir }}/sites-available"
+nginx_lb_sites_enabled: "{{ nginx_lb_conf_dir }}/sites-enabled"
+nginx_lb_default_site: "{{ nginx_lb_conf_dir }}/sites-enabled/default"
+nginx_lb_site_file: "{{ nginx_lb_upstream_name }}.conf"
+
+# Utilisateur / groupe d'exécution
+nginx_lb_user: www-data
+nginx_lb_group: www-data
+
+# Runtime / logs / pid
+nginx_lb_run_dir: "{{ '/run/nginx' if not nginx_lb_instance_enabled | bool else '/run/nginx-' ~ nginx_lb_instance }}"
+nginx_lb_log_dir: "{{ '/var/log/nginx' if not nginx_lb_instance_enabled | bool else '/var/log/nginx-' ~ nginx_lb_instance }}"
+nginx_lb_pid_file: "{{ nginx_lb_run_dir }}/nginx.pid"
+nginx_lb_systemd_dir: /etc/systemd/system
+
+# Divers
+nginx_lb_worker_connections: 768
 
 # Proxy
 nginx_lb_proxy_connect_timeout: 5s

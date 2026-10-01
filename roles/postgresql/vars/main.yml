@@ -1,11 +1,10 @@
 ---
-# Constantes internes du rôle (chemins PostgreSQL, non destinés à être surchargés)
-postgresql_conf_dir: "/etc/postgresql/{{ postgresql_version }}/main"
-postgresql_conf_file: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
-postgresql_conf_include_dir: "/etc/postgresql/{{ postgresql_version }}/main/conf.d"
-postgresql_conf_include_file: "/etc/postgresql/{{ postgresql_version }}/main/conf.d/10-ansible.conf"
-postgresql_hba_file: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
-postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
-postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
-postgresql_service: postgresql
+# =============================================================================
+# Rôle postgresql — constantes internes
+# -----------------------------------------------------------------------------
+# Les chemins (postgresql_conf_dir, postgresql_data_dir, ...) et le service
+# ont été déplacés dans defaults/main.yml : ils doivent être CALCULÉS depuis
+# postgresql_instance/cluster pour permettre le cloisonnement local.
+# La précédence de vars/ (au-dessus de host_vars/group_vars) l'interdisait ici.
+# =============================================================================
 
